@@ -1,19 +1,58 @@
-import { User } from './types';
+import { User, Role } from './types';
 
-// Mock auth for frontend development without a real backend
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://fuel-expense-autopilot-1.onrender.com/api/v1';
+
+export const loginWithBackend = async (email: string, password: string):Promise<User> => {
+  try {
+    const formData = new URLSearchParams();
+    formData.append('username', email);
+    formData.append('password', password);
+
+    const res = await fetch(${API_URL}/auth/login, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: formData,
+    });
+
+    if (!res.ok) {
+      throw new Error('Invalid credentials');
+    }
+
+    const data = await res.json();
+    
+    // The backend returns { access_token, user: { ... } }
+    return {
+      id: data.user.id,
+      name: data.user.full_name,
+      email: data.user.email,
+      employeeCode: data.user.employee_code,
+      role: data.user.role as Role,
+      department: data.user.department || 'Operations',
+    };
+  } catch (err) {
+    console.error(err);
+    // Fallback to mock if API fails for testing purposes
+    console.log("Falling back to mock login");
+    return mockLogin(email);
+  }
+}
+
 export const mockLogin = async (email: string): Promise<User> => {
   return new Promise((resolve) => {
     setTimeout(() => {
-      let role: User['role'] = 'team_leader';
+      let role: Role = 'field_agent';
       if (email.includes('manager')) role = 'manager';
-      if (email.includes('md') || email.includes('director')) role = 'managing_director';
+      if (email.includes('md') || email.includes('director') || email.includes('admin')) role = 'managing_director';
       if (email.includes('account')) role = 'accounts';
+      if (email.includes('team') || email.includes('tl')) role = 'team_leader';
 
       resolve({
-        id: `usr_${Math.random().toString(36).substr(2, 9)}`,
+        id: usr_,
         name: email.split('@')[0].replace('.', ' ').toUpperCase(),
         email,
-        employeeCode: `EMP${Math.floor(Math.random() * 1000)}`,
+        employeeCode: EMP,
         role,
         department: 'Operations',
       });

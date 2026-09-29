@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store';
-import { mockLogin } from '@/lib/auth';
+import { loginWithBackend } from '@/lib/auth';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card, CardHeader, CardBody, CardTitle } from '@/components/ui/Card';
@@ -26,7 +26,7 @@ export default function LoginPage() {
 
     setIsLoading(true);
     try {
-      const user = await mockLogin(email);
+      const user = await loginWithBackend(email, password);
       login(user);
       toast.success(`Welcome back, ${user.name}`);
       
@@ -132,3 +132,4 @@ export default function LoginPage() {
     </div>
   );
 }
+
