@@ -1,0 +1,9 @@
+{
+  "appId": "com.company.fuelautopilot",
+  "appName": "Fuel Autopilot",
+  "webDir": "www",
+  "server": {
+    "url": "https://fuel-expense-autopilot.vercel.app",
+    "cleartext": true
+  }
+}
