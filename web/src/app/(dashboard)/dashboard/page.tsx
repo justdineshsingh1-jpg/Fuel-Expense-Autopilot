@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { StatsCard } from '@/components/ui/StatsCard';
 import { Card, CardHeader, CardTitle, CardBody } from '@/components/ui/Card';
 import { useAuthStore } from '@/lib/store';
@@ -12,7 +12,8 @@ import {
   MapPin,
   Camera,
   Play,
-  Square
+  Square,
+  X
 } from 'lucide-react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -38,6 +39,40 @@ const COLORS = ['#0088FE', '#00C49F', '#FFBB28'];
 
 function FieldAgentDashboard({ user }: { user: any }) {
   const [tripActive, setTripActive] = useState(false);
+  
+  // Odometer Modal State
+  const [showModal, setShowModal] = useState(false);
+  const [modalType, setModalType] = useState<'start' | 'end'>('start');
+  const [odometerReading, setOdometerReading] = useState('');
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleTripClick = () => {
+    setModalType(tripActive ? 'end' : 'start');
+    setOdometerReading('');
+    setPhotoPreview(null);
+    setShowModal(true);
+  };
+
+  const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setPhotoPreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!odometerReading || !photoPreview) {
+      alert("Both odometer reading and live photo are mandatory.");
+      return;
+    }
+    
+    // In a real app, this would be an API call to save the data
+    setTripActive(modalType === 'start');
+    setShowModal(false);
+  };
 
   return (
     <div className="space-y-6 max-w-md mx-auto pb-10">
@@ -47,7 +82,7 @@ function FieldAgentDashboard({ user }: { user: any }) {
           <p className="opacity-90 mb-6">{tripActive ? "Your trip is currently active." : "Ready to start your day?"}</p>
           
           <button 
-            onClick={() => setTripActive(!tripActive)}
+            onClick={handleTripClick}
             className={`w-full font-bold py-4 rounded-xl shadow uppercase tracking-wide text-lg flex items-center justify-center gap-2 ${tripActive ? 'bg-red-500 text-white' : 'bg-white text-primary'}`}
           >
             {tripActive ? <><Square className="h-5 w-5" fill="currentColor" /> End Trip</> : <><Play className="h-5 w-5" fill="currentColor" /> Start Trip</>}
@@ -57,13 +92,19 @@ function FieldAgentDashboard({ user }: { user: any }) {
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <button className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center justify-center gap-3 active:scale-95 transition-transform">
+        <button 
+          disabled={!tripActive}
+          className={`p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center justify-center gap-3 transition-transform ${tripActive ? 'bg-white active:scale-95' : 'bg-gray-50 opacity-50'}`}
+        >
           <div className="h-14 w-14 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center">
             <MapPin className="h-7 w-7" />
           </div>
           <span className="font-semibold text-gray-700">Check-in</span>
         </button>
-        <button className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center justify-center gap-3 active:scale-95 transition-transform">
+        <button 
+          disabled={!tripActive}
+          className={`p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center justify-center gap-3 transition-transform ${tripActive ? 'bg-white active:scale-95' : 'bg-gray-50 opacity-50'}`}
+        >
           <div className="h-14 w-14 bg-green-50 text-green-600 rounded-full flex items-center justify-center">
             <Camera className="h-7 w-7" />
           </div>
@@ -79,6 +120,84 @@ function FieldAgentDashboard({ user }: { user: any }) {
           <p className="text-sm mt-1">Start your trip to begin tracking.</p>
         </div>
       </div>
+
+      {/* ODOMETER MODAL */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-200">
+            <div className="bg-slate-900 p-4 text-white flex justify-between items-center">
+              <h3 className="font-bold text-lg">
+                {modalType === 'start' ? 'Start Shift' : 'End Shift'}
+              </h3>
+              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-white">
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleSubmit} className="p-6 space-y-6">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Vehicle Odometer Reading (KM) <span className="text-red-500">*</span>
+                </label>
+                <input 
+                  type="number" 
+                  required
+                  placeholder="e.g. 45201"
+                  value={odometerReading}
+                  onChange={(e) => setOdometerReading(e.target.value)}
+                  className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-lg focus:border-primary focus:ring-primary outline-none transition-colors"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Live Dashboard Photo <span className="text-red-500">*</span>
+                </label>
+                
+                {/* Hidden input that forces camera on mobile devices */}
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  capture="environment"
+                  ref={fileInputRef}
+                  onChange={handlePhotoCapture}
+                  className="hidden" 
+                />
+                
+                {!photoPreview ? (
+                  <button 
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full border-2 border-dashed border-gray-300 rounded-xl p-8 flex flex-col items-center justify-center text-gray-500 hover:bg-gray-50 hover:border-primary transition-colors"
+                  >
+                    <Camera className="h-8 w-8 mb-2 text-gray-400" />
+                    <span className="font-medium">Tap to open Camera</span>
+                    <span className="text-xs mt-1 text-gray-400">Gallery uploads disabled</span>
+                  </button>
+                ) : (
+                  <div className="relative rounded-xl overflow-hidden border-2 border-primary">
+                    <img src={photoPreview} alt="Odometer preview" className="w-full h-40 object-cover" />
+                    <button 
+                      type="button"
+                      onClick={() => setPhotoPreview(null)}
+                      className="absolute top-2 right-2 bg-black/50 text-white p-1.5 rounded-full hover:bg-black/70"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <button 
+                type="submit" 
+                className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-3.5 rounded-xl shadow transition-colors"
+              >
+                Confirm & {modalType === 'start' ? 'Start' : 'End'} Shift
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -147,4 +266,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
