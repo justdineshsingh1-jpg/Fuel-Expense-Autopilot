@@ -97,10 +97,10 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        <StatsCard title="Total Fuel Expense (MTD)" value="?2,45,000" trend={{ value: 12, isPositive: false }} icon={<IndianRupee className="h-6 w-6 text-gray-400" />} />
-        <StatsCard title="Pending Approvals" value="42" icon={<FileText className="h-6 w-6 text-gray-400" />} />
-        <StatsCard title="Fraud Flags" value="5" trend={{ value: 2, isPositive: false }} icon={<AlertTriangle className="h-6 w-6 text-red-500" />} />
-        <StatsCard title="Reconciled" value="128" trend={{ value: 8, isPositive: true }} icon={<CheckCircle2 className="h-6 w-6 text-green-500" />} />
+        <StatsCard title="Total Fuel Expense (MTD)" value="?2,45,000" trend={{ value: 12, isPositive: false }} icon={IndianRupee} />
+        <StatsCard title="Pending Approvals" value="42" icon={FileText} />
+        <StatsCard title="Fraud Flags" value="5" trend={{ value: 2, isPositive: false }} icon={AlertTriangle} />
+        <StatsCard title="Reconciled" value="128" trend={{ value: 8, isPositive: true }} icon={CheckCircle2} />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -147,3 +147,4 @@ export default function Dashboard() {
     </div>
   );
 }
+

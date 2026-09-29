@@ -1,4 +1,4 @@
-export type Role = 'team_leader' | 'manager' | 'managing_director' | 'accounts';
+export type Role = 'field_agent' | 'team_leader' | 'manager' | 'managing_director' | 'accounts';
 
 export type User = {
   id: string;
@@ -73,3 +73,4 @@ export type AccountExportRecord = {
   debitAmount: number;
   creditAmount: number;
 };
+
