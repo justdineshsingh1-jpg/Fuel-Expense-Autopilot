@@ -1,0 +1,8 @@
+node_modules/
+__pycache__/
+.env
+.venv/
+.dart_tool/
+build/
+.idea/
+.vs/
