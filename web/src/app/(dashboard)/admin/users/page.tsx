@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { ROLE_LABELS } from '@/lib/constants';
-import { Plus, UserCog, MoreVertical, Edit, Trash } from 'lucide-react';
+import { Plus, UserCog, MoreVertical, Edit, Trash, CheckCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const mockUsers = [
@@ -110,3 +110,5 @@ export default function UsersPage() {
     </div>
   );
 }
+
+

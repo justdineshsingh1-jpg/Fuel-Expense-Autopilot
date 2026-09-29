@@ -116,11 +116,7 @@ export default function ApprovalsPage() {
       <Card>
         <div className="p-4 border-b border-gray-200 flex flex-wrap gap-4 items-end bg-gray-50/50">
           <div className="flex-1 min-w-[200px]">
-            <Input 
-              placeholder="Search employee or ID..." 
-              className="pl-10"
-              prefix={<Search className="h-4 w-4 text-gray-400 absolute left-3 top-3" />}
-            />
+            <div className="relative"><Search className="h-4 w-4 text-gray-400 absolute left-3 top-3" /><Input placeholder="Search employee or ID..." className="pl-10" /></div>
           </div>
           <DateRangePicker 
             startDate="" 
@@ -305,3 +301,5 @@ export default function ApprovalsPage() {
     </div>
   );
 }
+
+

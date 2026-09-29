@@ -75,11 +75,7 @@ export default function AccountsPage() {
 
       <Card>
         <div className="p-4 border-b border-gray-200">
-          <Input 
-            placeholder="Search employee..." 
-            className="max-w-xs pl-10"
-            prefix={<Search className="h-4 w-4 text-gray-400 absolute left-3 top-3" />}
-          />
+          <div className="relative max-w-xs"><Search className="h-4 w-4 text-gray-400 absolute left-3 top-3" /><Input placeholder="Search employee..." className="pl-10" /></div>
         </div>
         <table className="w-full text-sm text-left">
           <thead className="bg-gray-50 border-b border-gray-200">
@@ -115,3 +111,4 @@ export default function AccountsPage() {
     </div>
   );
 }
+
