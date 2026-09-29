@@ -25,6 +25,9 @@ export function Sidebar() {
   if (!user) return null;
 
   const roleMenus = {
+    field_agent: [
+      { name: 'My Dashboard', href: '/dashboard', icon: LayoutDashboard },
+    ],
     team_leader: [
       { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
       { name: 'Pending Approvals', href: '/approvals', icon: CheckSquare },
@@ -106,3 +109,4 @@ export function Sidebar() {
     </div>
   );
 }
+

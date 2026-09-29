@@ -1,0 +1,53 @@
+{
+  "expo": {
+    "name": "Fuel Autopilot",
+    "slug": "fuel-expense-autopilot-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.company.fuelautopilot",
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app uses the camera to upload fuel bills.",
+        "NSLocationWhenInUseUsageDescription": "This app uses your location to track driving distances."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.company.fuelautopilot",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "CAMERA",
+        "RECORD_AUDIO"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow this app to use your location to track fuel expenses."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow this app to access your camera to upload bills."
+        }
+      ]
+    ]
+  }
+}
