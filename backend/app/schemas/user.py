@@ -28,7 +28,7 @@ class UserResponse(BaseModel):
     shift_start_time: Optional[time] = None
     shift_end_time: Optional[time] = None
     is_active: bool
-    created_at: datetime
+    created_at: Optional[datetime] = None
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -36,3 +36,4 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserResponse
+
