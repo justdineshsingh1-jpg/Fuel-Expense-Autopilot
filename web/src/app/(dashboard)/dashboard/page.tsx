@@ -319,7 +319,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
         <StatsCard title="Total Expense (MTD)" value="?2,45,000" trend={{ value: 12, isPositive: false }} icon={IndianRupee} />
         <StatsCard title="Pending Approvals" value="42" icon={FileText} />
-        <StatsCard title="Fraud Flags" value="5" trend={{ value: 2, is opened: false }} icon={AlertTriangle} />
+        <StatsCard title="Fraud Flags" value="5" trend={{ value: 2, isPositive: false }} icon={AlertTriangle} />
         <StatsCard title="Reconciled" value="128" trend={{ value: 8, isPositive: true }} icon={CheckCircle2} />
       </div>
 
@@ -367,3 +367,4 @@ export default function Dashboard() {
     </div>
   );
 }
+
