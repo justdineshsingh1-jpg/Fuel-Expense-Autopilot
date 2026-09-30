@@ -80,12 +80,10 @@ function FieldAgentDashboard({ user }: { user: any }) {
       try {
         // 1. Get GPS Location
         const position = await new Promise<GeolocationPosition>((res, rej) => {
-          navigator.geolocation.getCurrentPosition(res, rej, {
+          import('@capacitor/geolocation').then(({ Geolocation }) => { Geolocation.getCurrentPosition({ enableHighAccuracy: true }).then(pos => res({coords: {latitude: pos.coords.latitude, longitude: pos.coords.longitude}})).catch(rej); }); /*
             enableHighAccuracy: true,
             timeout: 7000,
-            maximumAge: 0
-          });
-        }).catch(() => null);
+            */ }).catch(() => null);
 
         // 2. Load Image
         const img = new Image();
@@ -470,3 +468,4 @@ export default function Dashboard() {
     </div>
   );
 }
+

@@ -9,6 +9,8 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@capacitor/core": "^6.2.2",
+    "@capacitor/geolocation": "^6.1.1",
     "@tanstack/react-table": "^8.11.6",
     "axios": "^1.6.5",
     "clsx": "^2.1.0",
