@@ -10,6 +10,8 @@ import { Card, CardHeader, CardBody, CardTitle } from '@/components/ui/Card';
 import { ShieldCheck } from 'lucide-react';
 import toast from 'react-hot-toast';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://fuel-expense-autopilot-1.onrender.com/api/v1';
+
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -20,7 +22,7 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) {
-      toast.error('Please enter both email and password');
+      toast.error('Please fill in all fields');
       return;
     }
 
@@ -30,7 +32,6 @@ export default function LoginPage() {
       login(user);
       toast.success(`Welcome back, ${user.name}`);
       
-      // Role based redirect
       if (user.role === 'team_leader' || user.role === 'manager') {
         router.push('/approvals');
       } else if (user.role === 'managing_director') {
@@ -41,49 +42,92 @@ export default function LoginPage() {
         router.push('/dashboard');
       }
     } catch (error) {
-      toast.error('Login failed');
+      toast.error('Login failed. Please check your credentials.');
     } finally {
       setIsLoading(false);
     }
   };
 
+  const handleForgotPassword = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!email) {
+      toast.error('Please enter your email address first, then click Forgot Password');
+      return;
+    }
+    
+    const promise = fetch(`${API_URL}/auth/forgot-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    }).then(res => {
+      if (!res.ok) throw new Error();
+      return res;
+    });
+
+    toast.promise(promise, {
+      loading: 'Sending reset email...',
+      success: 'Reset email sent! Please check your inbox.',
+      error: 'Failed to send reset email.'
+    });
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
+    <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
         <div className="flex justify-center">
-          <div className="h-12 w-12 rounded-lg bg-primary flex items-center justify-center">
+          <div className="h-12 w-12 rounded-xl bg-primary flex items-center justify-center">
             <ShieldCheck className="h-8 w-8 text-white" />
           </div>
         </div>
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+        <h2 className="mt-6 text-center text-3xl font-extrabold text-slate-900 tracking-tight">
           Fuel Expense Autopilot
         </h2>
-        <p className="mt-2 text-center text-sm text-gray-600">
+        <p className="mt-2 text-center text-sm text-slate-600">
           Sign in to your account
         </p>
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <Card>
-          <CardBody>
+        <Card className="border-0 shadow-xl shadow-slate-200/50">
+          <CardBody className="py-8 px-4 sm:px-10">
             <form className="space-y-6" onSubmit={handleSubmit}>
-              <Input
-                label="Email address"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Try: manager@company.com"
-              />
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                  Email address
+                </label>
+                <div className="mt-1">
+                  <Input
+                    id="email"
+                    name="email"
+                    type="email"
+                    autoComplete="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="name@company.com"
+                    className="h-11"
+                  />
+                </div>
+              </div>
 
-              <Input
-                label="Password"
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Any password works for demo"
-              />
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                  Password
+                </label>
+                <div className="mt-1">
+                  <Input
+                    id="password"
+                    name="password"
+                    type="password"
+                    autoComplete="current-password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter your password"
+                    className="h-11"
+                  />
+                </div>
+              </div>
 
               <div className="flex items-center justify-between">
                 <div className="flex items-center">
@@ -91,45 +135,33 @@ export default function LoginPage() {
                     id="remember-me"
                     name="remember-me"
                     type="checkbox"
-                    className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+                    className="h-4 w-4 text-primary focus:ring-primary border-slate-300 rounded"
                   />
-                  <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
+                  <label htmlFor="remember-me" className="ml-2 block text-sm text-slate-700">
                     Remember me
                   </label>
                 </div>
 
                 <div className="text-sm">
-                  <a href="#" className="font-medium text-primary hover:text-primary-dark">
+                  <a href="#" onClick={handleForgotPassword} className="font-semibold text-primary hover:text-primary/80 transition-colors">
                     Forgot your password?
                   </a>
                 </div>
               </div>
 
-              <Button type="submit" className="w-full" size="lg" isLoading={isLoading}>
-                Sign in
-              </Button>
+              <div>
+                <Button
+                  type="submit"
+                  className="w-full h-11 text-base font-bold"
+                  isLoading={isLoading}
+                >
+                  Sign in
+                </Button>
+              </div>
             </form>
-            
-            <div className="mt-6">
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-300" />
-                </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="px-2 bg-white text-gray-500">Demo Accounts</span>
-                </div>
-              </div>
-              <div className="mt-6 grid grid-cols-2 gap-3 text-xs text-center text-gray-500">
-                <div>team_leader@demo.com</div>
-                <div>manager@demo.com</div>
-                <div>md@demo.com</div>
-                <div>accounts@demo.com</div>
-              </div>
-            </div>
           </CardBody>
         </Card>
       </div>
     </div>
   );
 }
-
