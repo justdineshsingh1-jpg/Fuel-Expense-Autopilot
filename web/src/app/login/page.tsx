@@ -10,7 +10,7 @@ import { Card, CardHeader, CardBody, CardTitle } from '@/components/ui/Card';
 import { ShieldCheck } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://fuel-expense-autopilot-1.onrender.com/api/v1';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://fuel-expense-autopilot-1.onrender.com/api';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -165,3 +165,4 @@ export default function LoginPage() {
     </div>
   );
 }
+
