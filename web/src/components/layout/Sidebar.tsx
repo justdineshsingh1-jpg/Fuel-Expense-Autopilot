@@ -53,7 +53,7 @@ export function Sidebar() {
   const baseItems = roleMenus[user.role] || [];
   const menuItems = [...baseItems];
   
-  if (['manager', 'managing_director'].includes(user.role)) {
+  if (user.role === 'managing_director') {
     menuItems.push({ name: 'User Management', href: '/admin/users', icon: Users });
   }
 
@@ -109,3 +109,4 @@ export function Sidebar() {
     </div>
   );
 }
+
