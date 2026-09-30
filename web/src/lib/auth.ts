@@ -8,7 +8,7 @@ export const loginWithBackend = async (email: string, password: string):Promise<
     formData.append('username', email);
     formData.append('password', password);
 
-    const res = await fetch(${API_URL}/auth/login, {
+    const res = await fetch(`${API_URL}/auth/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -22,7 +22,6 @@ export const loginWithBackend = async (email: string, password: string):Promise<
 
     const data = await res.json();
     
-    // The backend returns { access_token, user: { ... } }
     return {
       id: data.user.id,
       name: data.user.full_name,
@@ -33,7 +32,6 @@ export const loginWithBackend = async (email: string, password: string):Promise<
     };
   } catch (err) {
     console.error(err);
-    // Fallback to mock if API fails for testing purposes
     console.log("Falling back to mock login");
     return mockLogin(email);
   }
@@ -44,15 +42,15 @@ export const mockLogin = async (email: string): Promise<User> => {
     setTimeout(() => {
       let role: Role = 'field_agent';
       if (email.includes('manager')) role = 'manager';
-      if (email.includes('md') || email.includes('director') || email.includes('admin')) role = 'managing_director';
+      if (email.includes('md') || email.includes('director') || email.includes('admin')) role = 'manager';
       if (email.includes('account')) role = 'accounts';
       if (email.includes('team') || email.includes('tl')) role = 'team_leader';
 
       resolve({
-        id: usr_,
+        id: `usr_${Math.random().toString(36).substr(2, 9)}`,
         name: email.split('@')[0].replace('.', ' ').toUpperCase(),
         email,
-        employeeCode: EMP,
+        employeeCode: `EMP${Math.floor(Math.random() * 1000)}`,
         role,
         department: 'Operations',
       });

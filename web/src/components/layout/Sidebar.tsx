@@ -50,9 +50,9 @@ export function Sidebar() {
     ]
   };
 
-  const menuItems = roleMenus[user.role] || [];
+  const baseItems = roleMenus[user.role] || [];
+  const menuItems = [...baseItems];
   
-  // Admin items for managers/MDs
   if (['manager', 'managing_director'].includes(user.role)) {
     menuItems.push({ name: 'User Management', href: '/admin/users', icon: Users });
   }
@@ -109,4 +109,3 @@ export function Sidebar() {
     </div>
   );
 }
-
