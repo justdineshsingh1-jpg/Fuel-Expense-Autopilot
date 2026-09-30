@@ -6,8 +6,50 @@ from app.schemas.user import UserLogin, UserCreate, UserResponse, TokenResponse
 from app.models.user import User
 from app.auth.jwt_handler import verify_password, get_password_hash, create_access_token
 from app.auth.dependencies import get_current_user
+from pydantic import BaseModel
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import random
+import string
 
 router = APIRouter()
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+def send_reset_email(recipient_email: str, new_password: str):
+    sender_email = 'admin@dhanpurna.net'
+    sender_password = 'sowj crys iqha bxci'
+    
+    msg = MIMEMultipart()
+    msg['From'] = sender_email
+    msg['To'] = recipient_email
+    msg['Subject'] = 'Fuel Autopilot - Password Reset'
+    
+    body = f"""Hello,
+    
+Your password for the Fuel Expense Autopilot system has been successfully reset.
+    
+Your new temporary password is: {new_password}
+    
+Please log in to the application and ensure you keep this password secure.
+    
+Best regards,
+Fuel Autopilot System
+"""
+    msg.attach(MIMEText(body, 'plain'))
+    
+    try:
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(sender_email, sender_password.replace(' ', ''))
+        server.send_message(msg)
+        server.quit()
+        return True
+    except Exception as e:
+        print(f"Error sending email: {e}")
+        return False
 
 @router.post("/login", response_model=TokenResponse)
 async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
@@ -47,3 +89,28 @@ async def register(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
 @router.get("/me", response_model=UserResponse)
 async def get_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+@router.post("/forgot-password")
+async def forgot_password(req: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
+    stmt = select(User).where(User.email == req.email)
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        # Return ok anyway to prevent email enumeration
+        return {"message": "If an account exists, a reset link has been sent."}
+        
+    # Generate 8 char temporary password
+    new_password = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+    
+    # Send email first
+    success = send_reset_email(user.email, new_password)
+    
+    if success:
+        # Update DB if email sent
+        user.password_hash = get_password_hash(new_password)
+        await db.commit()
+        return {"message": "If an account exists, a reset link has been sent."}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to send reset email")
+
