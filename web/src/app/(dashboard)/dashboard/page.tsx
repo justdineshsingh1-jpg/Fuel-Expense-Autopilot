@@ -13,7 +13,8 @@ import {
   Camera,
   Play,
   Square,
-  X
+  X,
+  Loader2
 } from 'lucide-react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -48,6 +49,7 @@ function FieldAgentDashboard({ user }: { user: any }) {
   const [odometerReading, setOdometerReading] = useState('');
   const [routeLocations, setRouteLocations] = useState('');
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
   
   // Expense State
   const [expenseType, setExpenseType] = useState('Fuel');
@@ -73,10 +75,105 @@ function FieldAgentDashboard({ user }: { user: any }) {
     setShowModal(true);
   };
 
-  const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const processWatermark = async (file: File): Promise<string> => {
+    return new Promise(async (resolve, reject) => {
+      try {
+        // 1. Get GPS Location
+        const position = await new Promise<GeolocationPosition>((res, rej) => {
+          navigator.geolocation.getCurrentPosition(res, rej, {
+            enableHighAccuracy: true,
+            timeout: 7000,
+            maximumAge: 0
+          });
+        }).catch(() => null);
+
+        // 2. Load Image
+        const img = new Image();
+        img.src = URL.createObjectURL(file);
+        
+        img.onload = () => {
+          // 3. Setup Canvas (Scale down if too huge to save memory)
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return reject('No canvas context');
+
+          const MAX_DIM = 1200;
+          let width = img.width;
+          let height = img.height;
+          
+          if (width > height && width > MAX_DIM) {
+            height *= MAX_DIM / width;
+            width = MAX_DIM;
+          } else if (height > MAX_DIM) {
+            width *= MAX_DIM / height;
+            height = MAX_DIM;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          // Draw Original Image
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // 4. Draw Watermark Background Banner
+          const bannerHeight = Math.max(80, height * 0.12);
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
+          ctx.fillRect(0, height - bannerHeight, width, bannerHeight);
+
+          // 5. Draw Text
+          const fontSize = Math.max(16, width * 0.025);
+          ctx.font = `${fontSize}px Arial`;
+          ctx.fillStyle = 'white';
+          ctx.textAlign = 'left';
+          
+          const padding = width * 0.03;
+          const now = new Date();
+          const timeStr = now.toLocaleString('en-IN');
+          
+          let geoStr = 'GPS: Location Unavailable';
+          if (position) {
+            geoStr = `Lat: ${position.coords.latitude.toFixed(6)}, Lng: ${position.coords.longitude.toFixed(6)}`;
+          }
+
+          // Top line: Date/Time
+          ctx.fillText(`Date: ${timeStr}`, padding, height - bannerHeight + (bannerHeight * 0.4));
+          
+          // Bottom line: GPS
+          ctx.fillStyle = position ? '#4ade80' : '#f87171'; // green if success, red if failed
+          ctx.fillText(geoStr, padding, height - bannerHeight + (bannerHeight * 0.8));
+          
+          // Right side: User/App Info
+          ctx.textAlign = 'right';
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+          ctx.fillText(`Agent: ${user?.name || 'Unknown'}`, width - padding, height - bannerHeight + (bannerHeight * 0.4));
+          ctx.fillText('Fuel Autopilot Secured', width - padding, height - bannerHeight + (bannerHeight * 0.8));
+
+          // 6. Export
+          resolve(canvas.toDataURL('image/jpeg', 0.85));
+        };
+        
+        img.onerror = () => reject('Image load failed');
+      } catch (err) {
+        reject(err);
+      }
+    });
+  };
+
+  const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      setPhotoPreview(URL.createObjectURL(file));
+      setIsProcessingPhoto(true);
+      
+      try {
+        const stampedImage = await processWatermark(file);
+        setPhotoPreview(stampedImage);
+      } catch (error) {
+        console.error("Watermarking failed", error);
+        // Fallback to normal if canvas fails
+        setPhotoPreview(URL.createObjectURL(file));
+      } finally {
+        setIsProcessingPhoto(false);
+      }
     }
   };
 
@@ -265,7 +362,13 @@ function FieldAgentDashboard({ user }: { user: any }) {
                   className="hidden" 
                 />
                 
-                {!photoPreview ? (
+                {isProcessingPhoto ? (
+                  <div className="w-full border-2 border-dashed border-gray-300 rounded-xl p-8 flex flex-col items-center justify-center text-gray-500 bg-gray-50">
+                    <Loader2 className="h-8 w-8 mb-2 text-primary animate-spin" />
+                    <span className="font-medium">Stamping GPS & Time...</span>
+                    <span className="text-xs mt-1 text-gray-400">Please wait</span>
+                  </div>
+                ) : !photoPreview ? (
                   <button 
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
@@ -273,11 +376,11 @@ function FieldAgentDashboard({ user }: { user: any }) {
                   >
                     <Camera className="h-8 w-8 mb-2 text-gray-400" />
                     <span className="font-medium">Tap to open Camera</span>
-                    <span className="text-xs mt-1 text-gray-400">Gallery uploads disabled</span>
+                    <span className="text-xs mt-1 text-gray-400">Will auto-stamp GPS location</span>
                   </button>
                 ) : (
                   <div className="relative rounded-xl overflow-hidden border-2 border-primary">
-                    <img src={photoPreview} alt="Preview" className="w-full h-40 object-cover" />
+                    <img src={photoPreview} alt="Preview" className="w-full h-auto object-cover" />
                     <button 
                       type="button"
                       onClick={() => setPhotoPreview(null)}
@@ -367,4 +470,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
