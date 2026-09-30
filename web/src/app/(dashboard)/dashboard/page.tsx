@@ -13,8 +13,7 @@ import {
   Camera,
   Play,
   Square,
-  X,
-  Wrench
+  X
 } from 'lucide-react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -47,6 +46,7 @@ function FieldAgentDashboard({ user }: { user: any }) {
   
   // Odometer State
   const [odometerReading, setOdometerReading] = useState('');
+  const [routeLocations, setRouteLocations] = useState('');
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   
   // Expense State
@@ -59,6 +59,7 @@ function FieldAgentDashboard({ user }: { user: any }) {
   const handleTripClick = () => {
     setModalType(tripActive ? 'end' : 'start');
     setOdometerReading('');
+    setRouteLocations('');
     setPhotoPreview(null);
     setShowModal(true);
   };
@@ -95,6 +96,11 @@ function FieldAgentDashboard({ user }: { user: any }) {
       alert("Both odometer reading and live photo are mandatory.");
       return;
     }
+
+    if (modalType === 'end' && !routeLocations) {
+      alert("Please enter the locations you visited today.");
+      return;
+    }
     
     setTripActive(modalType === 'start');
     setShowModal(false);
@@ -125,7 +131,7 @@ function FieldAgentDashboard({ user }: { user: any }) {
           <div className="h-14 w-14 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center">
             <MapPin className="h-7 w-7" />
           </div>
-          <span className="font-semibold text-gray-700">Check-in</span>
+          <span className="font-semibold text-gray-700">Check-in GPS</span>
         </button>
         <button 
           onClick={handleExpenseClick}
@@ -143,7 +149,7 @@ function FieldAgentDashboard({ user }: { user: any }) {
         <h3 className="font-semibold text-gray-800 mb-4 px-1">Today's Activity</h3>
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center flex flex-col items-center justify-center text-gray-400">
           <MapPin className="h-10 w-10 mb-3 opacity-20" />
-          <p>No locations logged today.</p>
+          <p>No activity logged yet.</p>
           <p className="text-sm mt-1">Start your trip to begin tracking.</p>
         </div>
       </div>
@@ -161,13 +167,13 @@ function FieldAgentDashboard({ user }: { user: any }) {
               </button>
             </div>
             
-            <form onSubmit={handleSubmit} className="p-6 space-y-6">
+            <form onSubmit={handleSubmit} className="p-6 space-y-5">
               
               {/* ODOMETER FIELDS */}
               {(modalType === 'start' || modalType === 'end') && (
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Vehicle Odometer Reading (KM) <span className="text-red-500">*</span>
+                    {modalType === 'start' ? 'Start' : 'End'} Odometer Reading (KM) <span className="text-red-500">*</span>
                   </label>
                   <input 
                     type="number" 
@@ -176,6 +182,23 @@ function FieldAgentDashboard({ user }: { user: any }) {
                     value={odometerReading}
                     onChange={(e) => setOdometerReading(e.target.value)}
                     className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-lg focus:border-primary focus:ring-primary outline-none transition-colors"
+                  />
+                </div>
+              )}
+
+              {/* LOCATIONS FIELD (ONLY ON END SHIFT) */}
+              {modalType === 'end' && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Route / Locations Visited <span className="text-red-500">*</span>
+                  </label>
+                  <textarea 
+                    required
+                    placeholder="e.g. GS Road Hengrabari, Panbazar, Jhalukbari..."
+                    value={routeLocations}
+                    onChange={(e) => setRouteLocations(e.target.value)}
+                    rows={3}
+                    className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-base focus:border-primary focus:ring-primary outline-none transition-colors resize-none"
                   />
                 </div>
               )}
@@ -296,7 +319,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
         <StatsCard title="Total Expense (MTD)" value="?2,45,000" trend={{ value: 12, isPositive: false }} icon={IndianRupee} />
         <StatsCard title="Pending Approvals" value="42" icon={FileText} />
-        <StatsCard title="Fraud Flags" value="5" trend={{ value: 2, isPositive: false }} icon={AlertTriangle} />
+        <StatsCard title="Fraud Flags" value="5" trend={{ value: 2, is opened: false }} icon={AlertTriangle} />
         <StatsCard title="Reconciled" value="128" trend={{ value: 8, isPositive: true }} icon={CheckCircle2} />
       </div>
 
