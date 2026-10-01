@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Fuel Autopilot</string>
+    <string name="title_activity_main">Fuel Autopilot</string>
+    <string name="package_name">com.company.fuelautopilot</string>
+    <string name="custom_url_scheme">com.company.fuelautopilot</string>
+</resources>
