@@ -23,7 +23,10 @@ class Settings(BaseSettings):
     AWS_BUCKET_NAME: Optional[str] = None
     AWS_REGION: Optional[str] = None
     STORAGE_BUCKET_URL: Optional[str] = None
+    SUPABASE_URL: str = 'https://isjsbwjxvpmmgwvvksit.supabase.co'
+    SUPABASE_SERVICE_ROLE_KEY: str = ''
     
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
 
 settings = Settings()
+

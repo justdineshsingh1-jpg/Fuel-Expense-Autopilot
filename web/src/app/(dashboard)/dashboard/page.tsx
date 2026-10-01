@@ -4,6 +4,7 @@ import React, { useState, useRef } from 'react';
 import { StatsCard } from '@/components/ui/StatsCard';
 import { Card, CardHeader, CardTitle, CardBody } from '@/components/ui/Card';
 import { useAuthStore } from '@/lib/store';
+import toast from 'react-hot-toast';
 import { 
   FileText, 
   CheckCircle2, 
@@ -175,30 +176,66 @@ function FieldAgentDashboard({ user }: { user: any }) {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (modalType === 'expense') {
-      if (!expenseAmount || !photoPreview) {
-        alert("Amount and Bill Photo are mandatory.");
+    
+    if (!photoPreview) {
+      alert("A live photo is mandatory.");
+      return;
+    }
+
+    // Indicate loading state (you could add a loading spinner state here)
+    toast.loading("Uploading photo to secure cloud storage...");
+
+    try {
+      // Upload the compressed photo to the new backend base64 endpoint
+      const uploadRes = await fetch('https://fuel-expense-autopilot-1.onrender.com/api/upload/base64', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          image_base64: photoPreview,
+          folder: modalType === 'expense' ? 'bills' : 'odometer'
+        })
+      });
+
+      if (!uploadRes.ok) throw new Error("Image upload failed");
+      const { url } = await uploadRes.json();
+      
+      toast.dismiss();
+      toast.success("Image safely stored in Cloud!");
+
+      // Here is where we will soon add the POST /api/trips submission logic
+      console.log("Uploaded Cloud URL:", url);
+
+      if (modalType === 'expense') {
+        if (!expenseAmount) {
+          alert("Amount is mandatory.");
+          return;
+        }
+        toast.success("Expense submitted successfully!");
+        setShowModal(false);
         return;
       }
-      alert("Expense submitted successfully!");
+
+      if (!odometerReading) {
+        alert("Odometer reading is mandatory.");
+        return;
+      }
+
+      if (modalType === 'end' && !routeLocations) {
+        alert("Please enter the locations you visited today.");
+        return;
+      }
+      
+      toast.success(modalType === 'start' ? "Shift Started!" : "Shift Ended!");
+      setTripActive(modalType === 'start');
       setShowModal(false);
-      return;
-    }
 
-    if (!odometerReading || !photoPreview) {
-      alert("Both odometer reading and live photo are mandatory.");
-      return;
+    } catch (err) {
+      toast.dismiss();
+      toast.error("Network error during upload. Please try again.");
+      console.error(err);
     }
-
-    if (modalType === 'end' && !routeLocations) {
-      alert("Please enter the locations you visited today.");
-      return;
-    }
-    
-    setTripActive(modalType === 'start');
-    setShowModal(false);
   };
 
   return (
@@ -468,4 +505,6 @@ export default function Dashboard() {
     </div>
   );
 }
+
+
 

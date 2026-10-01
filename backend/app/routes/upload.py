@@ -1,23 +1,19 @@
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
-import uuid
-import os
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+from app.services.storage_service import upload_image_to_supabase
 
 router = APIRouter()
 
-UPLOAD_DIR = "uploads"
+class Base64UploadRequest(BaseModel):
+    image_base64: str
+    folder: str = 'misc'
 
-@router.post("/image")
-async def upload_image(file: UploadFile = File(...)):
-    if not os.path.exists(UPLOAD_DIR):
-        os.makedirs(UPLOAD_DIR)
-        
-    file_extension = file.filename.split(".")[-1]
-    file_name = f"{uuid.uuid4()}.{file_extension}"
-    file_path = os.path.join(UPLOAD_DIR, file_name)
-    
-    with open(file_path, "wb") as f:
-        content = await file.read()
-        f.write(content)
-        
-    # In production, this would upload to S3 and return a public URL
-    return {"url": f"/static/{file_name}"}
+class Base64UploadResponse(BaseModel):
+    url: str
+
+@router.post("/base64", response_model=Base64UploadResponse)
+async def upload_base64_image(request: Base64UploadRequest):
+    url = await upload_image_to_supabase(request.image_base64, request.folder)
+    if not url:
+        raise HTTPException(status_code=500, detail="Failed to upload image to cloud storage")
+    return {"url": url}
