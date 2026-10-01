@@ -14,7 +14,8 @@ import {
   DownloadCloud,
   Users,
   Settings,
-  ChevronLeft
+  ChevronLeft,
+  History
 } from 'lucide-react';
 
 export function Sidebar() {
@@ -27,6 +28,7 @@ export function Sidebar() {
   const roleMenus = {
     field_agent: [
       { name: 'My Dashboard', href: '/dashboard', icon: LayoutDashboard },
+      { name: 'My History', href: '/history', icon: History },
     ],
     team_leader: [
       { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -109,4 +111,5 @@ export function Sidebar() {
     </div>
   );
 }
+
 
