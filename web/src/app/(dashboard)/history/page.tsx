@@ -60,7 +60,7 @@ export default function HistoryPage() {
               onClick={() => setExpandedId(expandedId === trip.id ? null : trip.id)}
             >
               <div className="flex items-center gap-4">
-                <div className={h-12 w-12 rounded-full flex items-center justify-center \}>
+                <div className={`h-12 w-12 rounded-full flex items-center justify-center ${trip.status === 'Approved' ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600'}`}>
                   <Calendar className="h-6 w-6" />
                 </div>
                 <div>
@@ -69,7 +69,7 @@ export default function HistoryPage() {
                 </div>
               </div>
               <div className="text-right">
-                <span className={	ext-xs font-bold uppercase tracking-wider \}>
+                <span className={`text-xs font-bold uppercase tracking-wider ${trip.status === 'Approved' ? 'text-green-600' : 'text-orange-500'}`}>
                   {trip.status}
                 </span>
                 {trip.fuelAmount > 0 && (
@@ -80,17 +80,14 @@ export default function HistoryPage() {
               </div>
             </div>
 
-            {/* EXPANDED DETAILS */}
             {expandedId === trip.id && (
               <div className="border-t border-gray-100 bg-gray-50 p-5 space-y-5 animate-in slide-in-from-top-2 duration-200">
-                
                 <div>
                   <h4 className="text-xs font-bold text-gray-400 uppercase mb-2 flex items-center gap-1">
                     <Clock className="h-3 w-3" /> Shift Times
                   </h4>
                   <p className="text-sm font-medium text-gray-800">{trip.startTime} - {trip.endTime}</p>
                 </div>
-
                 <div>
                   <h4 className="text-xs font-bold text-gray-400 uppercase mb-2 flex items-center gap-1">
                     <MapPin className="h-3 w-3" /> Locations Visited
@@ -99,7 +96,6 @@ export default function HistoryPage() {
                     {trip.locations}
                   </p>
                 </div>
-
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <h4 className="text-xs font-bold text-gray-400 uppercase mb-2">Final Odometer</h4>
@@ -114,7 +110,6 @@ export default function HistoryPage() {
                     </div>
                   </div>
                 </div>
-
               </div>
             )}
           </div>
