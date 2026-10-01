@@ -42,7 +42,7 @@ export const mockLogin = async (email: string): Promise<User> => {
     setTimeout(() => {
       let role: Role = 'field_agent';
       if (email.includes('manager')) role = 'manager';
-      if (email.includes('md') || email.includes('director') || email.includes('admin')) role = 'manager';
+      if (email.includes('md') || email.includes('director') || email.includes('admin')) role = 'managing_director';
       if (email.includes('account')) role = 'accounts';
       if (email.includes('team') || email.includes('tl')) role = 'team_leader';
 
@@ -57,4 +57,5 @@ export const mockLogin = async (email: string): Promise<User> => {
     }, 1000);
   });
 };
+
 
