@@ -1,9 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Card, CardHeader, CardTitle, CardBody } from '@/components/ui/Card';
 import { useAuthStore } from '@/lib/store';
-import { MapPin, Calendar, Camera, Clock, IndianRupee } from 'lucide-react';
+import { MapPin, Calendar, Clock, IndianRupee } from 'lucide-react';
 import { ImageViewer } from '@/components/ui/ImageViewer';
 
 const mockHistoryData = [
@@ -89,7 +88,7 @@ export default function HistoryPage() {
                   <h4 className="text-xs font-bold text-gray-400 uppercase mb-2 flex items-center gap-1">
                     <Clock className="h-3 w-3" /> Shift Times
                   </h4>
-                  <p className="text-sm font-medium text-gray-800">{trip.startTime} — {trip.endTime}</p>
+                  <p className="text-sm font-medium text-gray-800">{trip.startTime} - {trip.endTime}</p>
                 </div>
 
                 <div>
