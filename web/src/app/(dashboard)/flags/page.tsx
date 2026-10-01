@@ -10,29 +10,7 @@ import { FLAG_TYPE_LABELS, STATUS_LABELS } from '@/lib/constants';
 import { formatDate } from '@/lib/utils';
 import toast from 'react-hot-toast';
 
-const mockFlags = [
-  {
-    id: 'FLG-882',
-    tripId: 'TRP-1002',
-    type: 'high_variance',
-    description: 'Claimed distance is 41.7% higher than OSRM calculated route. Normal acceptable variance is 10%.',
-    severity: 'high',
-    resolved: false,
-    tripDate: '2024-02-14',
-    employeeName: 'Priya Patel',
-    executiveExplanation: 'Had to take a detour due to heavy road construction on the main highway. Verified with local news.',
-  },
-  {
-    id: 'FLG-883',
-    tripId: 'TRP-1015',
-    type: 'weekend_travel',
-    description: 'Travel claimed on Sunday without prior weekend work approval record.',
-    severity: 'medium',
-    resolved: false,
-    tripDate: '2024-02-11',
-    employeeName: 'Amit Kumar',
-  }
-];
+const mockFlags: any[] = [];
 
 export default function FlagsPage() {
   const handleResolve = (id: string) => {
@@ -143,3 +121,4 @@ export default function FlagsPage() {
     </div>
   );
 }
+

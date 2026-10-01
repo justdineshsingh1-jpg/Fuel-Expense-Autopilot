@@ -18,50 +18,7 @@ import {
 import toast from 'react-hot-toast';
 
 // Mock data
-const mockData = [
-  {
-    id: 'TRP-1001',
-    employeeName: 'Rahul Sharma',
-    date: '2024-02-15',
-    route: 'Office -> Client A -> Client B -> Office',
-    distanceKm: 45.2,
-    claimedKm: 45.2,
-    osrmKm: 42.1,
-    variancePercentage: 7.3,
-    fuelAmount: 450,
-    status: 'pending',
-    startOdometerPhotoUrl: 'https://images.unsplash.com/photo-1599423689404-5154ee0d2023?w=400&q=80',
-    endOdometerPhotoUrl: 'https://images.unsplash.com/photo-1599423689404-5154ee0d2023?w=400&q=80',
-    fuelBillPhotoUrl: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=400&q=80',
-    clientVisits: [
-      { id: 'v1', clientName: 'TechCorp', timestamp: '2024-02-15T10:30:00Z', location: 'Andheri East' }
-    ],
-    fraudFlags: [],
-    waypoints: ['Office HQ', 'TechCorp, Andheri', 'GlobalSys, Powai', 'Office HQ']
-  },
-  {
-    id: 'TRP-1002',
-    employeeName: 'Priya Patel',
-    date: '2024-02-14',
-    route: 'Home -> Client Site -> Home',
-    distanceKm: 120.5,
-    claimedKm: 120.5,
-    osrmKm: 85.0,
-    variancePercentage: 41.7,
-    fuelAmount: 1200,
-    status: 'flagged',
-    startOdometerPhotoUrl: 'https://images.unsplash.com/photo-1599423689404-5154ee0d2023?w=400&q=80',
-    endOdometerPhotoUrl: 'https://images.unsplash.com/photo-1599423689404-5154ee0d2023?w=400&q=80',
-    fuelBillPhotoUrl: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=400&q=80',
-    clientVisits: [
-      { id: 'v2', clientName: 'MegaCorp', timestamp: '2024-02-14T11:00:00Z', location: 'Navi Mumbai' }
-    ],
-    fraudFlags: [
-      { id: 'f1', type: 'high_variance', description: 'Claimed distance is 41% higher than OSRM route.', severity: 'high', resolved: false, tripDate: '2024-02-14', employeeName: 'Priya Patel' }
-    ],
-    waypoints: ['Borivali', 'MegaCorp, Navi Mumbai', 'Borivali']
-  }
-];
+const mockData: any[] = [];
 
 export default function ApprovalsPage() {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
@@ -301,5 +258,6 @@ export default function ApprovalsPage() {
     </div>
   );
 }
+
 
 
