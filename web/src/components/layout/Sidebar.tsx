@@ -41,6 +41,7 @@ export function Sidebar() {
       { name: 'Flag Review', href: '/flags', icon: Flag },
     ],
     managing_director: [
+      { name: 'Pending Approvals', href: '/approvals', icon: CheckSquare },
       { name: 'Executive Summary', href: '/executive-summary', icon: PieChart },
       { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
       { name: 'Flag Review', href: '/flags', icon: Flag },
@@ -111,5 +112,6 @@ export function Sidebar() {
     </div>
   );
 }
+
 
 
