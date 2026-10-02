@@ -40,6 +40,47 @@ const mockDeptData = [
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28'];
 
 function FieldAgentDashboard({ user }: { user: any }) {
+  const [isGpsAllowed, setIsGpsAllowed] = useState<boolean | null>(null);
+  
+  useEffect(() => {
+    checkGps();
+  }, []);
+
+  const checkGps = async () => {
+    try {
+      const { Geolocation } = await import('@capacitor/geolocation');
+      const perms = await Geolocation.checkPermissions();
+      if (perms.location !== 'granted') {
+        const req = await Geolocation.requestPermissions();
+        setIsGpsAllowed(req.location === 'granted');
+      } else {
+        setIsGpsAllowed(true);
+      }
+    } catch (e) {
+      setIsGpsAllowed(true); // Allow on normal web browsers
+    }
+  };
+
+  if (isGpsAllowed === false) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center text-center px-4 space-y-4">
+        <div className="h-20 w-20 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-4">
+          <MapPin className="h-10 w-10" />
+        </div>
+        <h2 className="text-2xl font-bold text-gray-900">GPS is Required</h2>
+        <p className="text-gray-500 max-w-sm">
+          You cannot start a shift or use the Fuel Autopilot app without allowing Location Services.
+        </p>
+        <button 
+          onClick={checkGps}
+          className="mt-6 bg-primary hover:bg-primary/90 text-white font-bold py-3 px-8 rounded-xl shadow-lg transition-all"
+        >
+          Enable GPS
+        </button>
+      </div>
+    );
+  }
+
   const [tripActive, setTripActive] = useState(false);
   
   // Modals State
@@ -531,6 +572,7 @@ export default function Dashboard() {
     </div>
   );
 }
+
 
 
 
