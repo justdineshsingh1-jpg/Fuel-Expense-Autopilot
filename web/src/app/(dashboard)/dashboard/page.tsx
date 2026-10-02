@@ -158,17 +158,43 @@ function FieldAgentDashboard({ user }: { user: any }) {
     });
   };
 
-  const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoCapture = async () => {
+    setIsProcessingPhoto(true);
+    try {
+      const { Camera, CameraResultType, CameraSource } = await import('@capacitor/camera');
+      const image = await Camera.getPhoto({
+        quality: 100,
+        allowEditing: false,
+        resultType: CameraResultType.Uri,
+        source: CameraSource.Camera
+      });
+      
+      if (image.webPath) {
+        // fetch the blob
+        const response = await fetch(image.webPath);
+        const blob = await response.blob();
+        const file = new File([blob], "photo.jpg", { type: "image/jpeg" });
+        
+        const stampedImage = await processWatermark(file);
+        setPhotoPreview(stampedImage);
+      }
+    } catch (error) {
+      console.error("Camera/Watermarking failed", error);
+      // Fallback for desktop browsers testing
+      fileInputRef.current?.click();
+    } finally {
+      setIsProcessingPhoto(false);
+    }
+  };
+
+  const handleWebFallbackCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       setIsProcessingPhoto(true);
-      
       try {
         const stampedImage = await processWatermark(file);
         setPhotoPreview(stampedImage);
       } catch (error) {
-        console.error("Watermarking failed", error);
-        // Fallback to normal if canvas fails
         setPhotoPreview(URL.createObjectURL(file));
       } finally {
         setIsProcessingPhoto(false);
@@ -393,7 +419,7 @@ function FieldAgentDashboard({ user }: { user: any }) {
                   accept="image/*" 
                   capture="environment"
                   ref={fileInputRef}
-                  onChange={handlePhotoCapture}
+                  onChange={handleWebFallbackCapture}
                   className="hidden" 
                 />
                 
@@ -406,7 +432,7 @@ function FieldAgentDashboard({ user }: { user: any }) {
                 ) : !photoPreview ? (
                   <button 
                     type="button"
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={handlePhotoCapture}
                     className="w-full border-2 border-dashed border-gray-300 rounded-xl p-8 flex flex-col items-center justify-center text-gray-500 hover:bg-gray-50 hover:border-primary transition-colors"
                   >
                     <Camera className="h-8 w-8 mb-2 text-gray-400" />
@@ -505,6 +531,7 @@ export default function Dashboard() {
     </div>
   );
 }
+
 
 
 
