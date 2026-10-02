@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { StatsCard } from '@/components/ui/StatsCard';
 import { Card, CardHeader, CardTitle, CardBody } from '@/components/ui/Card';
 import { useAuthStore } from '@/lib/store';
@@ -505,6 +505,8 @@ export default function Dashboard() {
     </div>
   );
 }
+
+
 
 
 
