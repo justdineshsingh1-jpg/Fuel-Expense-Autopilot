@@ -66,6 +66,42 @@ function FieldAgentDashboard({ user }: { user: any }) {
     loadDailyStatus();
   }, []);
 
+  // BACKGROUND GPS TRACKER
+  useEffect(() => {
+    let intervalId: any;
+    if (tripActive) {
+      intervalId = setInterval(async () => {
+        try {
+          const { Geolocation } = await import('@capacitor/geolocation');
+          const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy: true });
+          const wp = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            timestamp: new Date().toLocaleTimeString()
+          };
+          
+          // Save locally
+          const saved = localStorage.getItem('dailyTripStatus');
+          if (saved) {
+            const data = JSON.parse(saved);
+            if (!data.waypoints) data.waypoints = [];
+            data.waypoints.push(wp);
+            localStorage.setItem('dailyTripStatus', JSON.stringify(data));
+          }
+          console.log("Background GPS point saved:", wp);
+          // Here we would also push to Supabase API in production
+        } catch(e) {
+          console.error("Tracker failed to get position", e);
+        }
+      }, 5 * 60 * 1000); // Every 5 minutes
+    }
+    
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [tripActive]);
+
+
   const loadDailyStatus = () => {
     const today = new Date().toLocaleDateString();
     const saved = localStorage.getItem('dailyTripStatus');

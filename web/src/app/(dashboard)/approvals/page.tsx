@@ -9,6 +9,10 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import { ImageViewer } from '@/components/ui/ImageViewer';
+import dynamic from 'next/dynamic';
+const RouteMap = dynamic(() => import('@/components/ui/RouteMap'), { ssr: false });
+
+
 import { formatCurrency, formatDate, cn } from '@/lib/utils';
 import { STATUS_LABELS } from '@/lib/constants';
 import { 
