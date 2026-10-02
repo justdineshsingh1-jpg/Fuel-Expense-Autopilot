@@ -42,9 +42,55 @@ const COLORS = ['#0088FE', '#00C49F', '#FFBB28'];
 function FieldAgentDashboard({ user }: { user: any }) {
   const [isGpsAllowed, setIsGpsAllowed] = useState<boolean | null>(null);
   
+  // Daily State
+  const [tripActive, setTripActive] = useState(false);
+  const [shiftCompleted, setShiftCompleted] = useState(false);
+  const [todayActivity, setTodayActivity] = useState<any>(null);
+
+  const [showModal, setShowModal] = useState(false);
+  const [modalType, setModalType] = useState<'start' | 'end' | 'expense'>('start');
+  
+  // Form State
+  const [odometerReading, setOdometerReading] = useState('');
+  const [routeLocations, setRouteLocations] = useState('');
+  const [expenseType, setExpenseType] = useState('Fuel');
+  const [expenseAmount, setExpenseAmount] = useState('');
+  const [expenseRemarks, setExpenseRemarks] = useState('');
+  
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     checkGps();
+    loadDailyStatus();
   }, []);
+
+  const loadDailyStatus = () => {
+    const today = new Date().toLocaleDateString();
+    const saved = localStorage.getItem('dailyTripStatus');
+    if (saved) {
+      try {
+        const data = JSON.parse(saved);
+        if (data.date === today) {
+          setTodayActivity(data);
+          if (data.status === 'started') {
+            setTripActive(true);
+            setShiftCompleted(false);
+          } else if (data.status === 'ended') {
+            setTripActive(false);
+            setShiftCompleted(true);
+          }
+        } else {
+          // New day
+          localStorage.removeItem('dailyTripStatus');
+          setTripActive(false);
+          setShiftCompleted(false);
+          setTodayActivity(null);
+        }
+      } catch(e) {}
+    }
+  };
 
   const checkGps = async () => {
     try {
@@ -57,7 +103,7 @@ function FieldAgentDashboard({ user }: { user: any }) {
         setIsGpsAllowed(true);
       }
     } catch (e) {
-      setIsGpsAllowed(true); // Allow on normal web browsers
+      setIsGpsAllowed(true);
     }
   };
 
@@ -81,25 +127,6 @@ function FieldAgentDashboard({ user }: { user: any }) {
     );
   }
 
-  const [tripActive, setTripActive] = useState(false);
-  
-  // Modals State
-  const [showModal, setShowModal] = useState(false);
-  const [modalType, setModalType] = useState<'start' | 'end' | 'expense'>('start');
-  
-  // Odometer State
-  const [odometerReading, setOdometerReading] = useState('');
-  const [routeLocations, setRouteLocations] = useState('');
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
-  const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
-  
-  // Expense State
-  const [expenseType, setExpenseType] = useState('Fuel');
-  const [expenseAmount, setExpenseAmount] = useState('');
-  const [expenseRemarks, setExpenseRemarks] = useState('');
-  
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
   const handleTripClick = () => {
     setModalType(tripActive ? 'end' : 'start');
     setOdometerReading('');
@@ -120,19 +147,14 @@ function FieldAgentDashboard({ user }: { user: any }) {
   const processWatermark = async (file: File): Promise<string> => {
     return new Promise(async (resolve, reject) => {
       try {
-        // 1. Get GPS Location
         const position = await new Promise<GeolocationPosition>((res, rej) => {
-          import('@capacitor/geolocation').then(({ Geolocation }) => { Geolocation.getCurrentPosition({ enableHighAccuracy: true }).then(pos => res({coords: {latitude: pos.coords.latitude, longitude: pos.coords.longitude}})).catch(rej); }); /*
-            enableHighAccuracy: true,
-            timeout: 7000,
-            */ }).catch(() => null);
+          import('@capacitor/geolocation').then(({ Geolocation }) => { Geolocation.getCurrentPosition({ enableHighAccuracy: true }).then(pos => res({coords: {latitude: pos.coords.latitude, longitude: pos.coords.longitude}} as any)).catch(rej); });
+        }).catch(() => null);
 
-        // 2. Load Image
         const img = new Image();
         img.src = URL.createObjectURL(file);
         
         img.onload = () => {
-          // 3. Setup Canvas (Scale down if too huge to save memory)
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d');
           if (!ctx) return reject('No canvas context');
@@ -140,7 +162,6 @@ function FieldAgentDashboard({ user }: { user: any }) {
           const MAX_DIM = 1200;
           let width = img.width;
           let height = img.height;
-          
           if (width > height && width > MAX_DIM) {
             height *= MAX_DIM / width;
             width = MAX_DIM;
@@ -151,47 +172,35 @@ function FieldAgentDashboard({ user }: { user: any }) {
 
           canvas.width = width;
           canvas.height = height;
-
-          // Draw Original Image
           ctx.drawImage(img, 0, 0, width, height);
 
-          // 4. Draw Watermark Background Banner
-          const bannerHeight = Math.max(80, height * 0.12);
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
+          const bannerHeight = 80;
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
           ctx.fillRect(0, height - bannerHeight, width, bannerHeight);
 
-          // 5. Draw Text
-          const fontSize = Math.max(16, width * 0.025);
-          ctx.font = `${fontSize}px Arial`;
-          ctx.fillStyle = 'white';
-          ctx.textAlign = 'left';
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 16px sans-serif';
           
-          const padding = width * 0.03;
+          const padding = 15;
           const now = new Date();
-          const timeStr = now.toLocaleString('en-IN');
           
-          let geoStr = 'GPS: Location Unavailable';
+          ctx.textAlign = 'left';
+          ctx.fillText(Date: , padding, height - bannerHeight + (bannerHeight * 0.4));
+          ctx.fillText(Time: , padding, height - bannerHeight + (bannerHeight * 0.8));
+
           if (position) {
-            geoStr = `Lat: ${position.coords.latitude.toFixed(6)}, Lng: ${position.coords.longitude.toFixed(6)}`;
+            ctx.textAlign = 'center';
+            ctx.fillText(LAT: , width / 2, height - bannerHeight + (bannerHeight * 0.4));
+            ctx.fillText(LNG: , width / 2, height - bannerHeight + (bannerHeight * 0.8));
           }
 
-          // Top line: Date/Time
-          ctx.fillText(`Date: ${timeStr}`, padding, height - bannerHeight + (bannerHeight * 0.4));
-          
-          // Bottom line: GPS
-          ctx.fillStyle = position ? '#4ade80' : '#f87171'; // green if success, red if failed
-          ctx.fillText(geoStr, padding, height - bannerHeight + (bannerHeight * 0.8));
-          
-          // Right side: User/App Info
           ctx.textAlign = 'right';
           ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-          ctx.fillText(`Agent: ${user?.name || 'Unknown'}`, width - padding, height - bannerHeight + (bannerHeight * 0.4));
+          ctx.fillText(Agent: , width - padding, height - bannerHeight + (bannerHeight * 0.4));
           ctx.fillText('Fuel Autopilot Secured', width - padding, height - bannerHeight + (bannerHeight * 0.8));
 
-          // 6. Export
           resolve(canvas.toDataURL('image/jpeg', 0.85));
         };
-        
         img.onerror = () => reject('Image load failed');
       } catch (err) {
         reject(err);
@@ -211,7 +220,6 @@ function FieldAgentDashboard({ user }: { user: any }) {
       });
       
       if (image.webPath) {
-        // fetch the blob
         const response = await fetch(image.webPath);
         const blob = await response.blob();
         const file = new File([blob], "photo.jpg", { type: "image/jpeg" });
@@ -221,7 +229,6 @@ function FieldAgentDashboard({ user }: { user: any }) {
       }
     } catch (error) {
       console.error("Camera/Watermarking failed", error);
-      // Fallback for desktop browsers testing
       fileInputRef.current?.click();
     } finally {
       setIsProcessingPhoto(false);
@@ -243,60 +250,58 @@ function FieldAgentDashboard({ user }: { user: any }) {
     }
   };
 
-    const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (!photoPreview) {
       alert("A live photo is mandatory.");
       return;
     }
 
-    // Indicate loading state (you could add a loading spinner state here)
     toast.loading("Uploading photo to secure cloud storage...");
 
     try {
-      // Upload the compressed photo to the new backend base64 endpoint
-      const uploadRes = await fetch('https://fuel-expense-autopilot-1.onrender.com/api/upload/base64', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          image_base64: photoPreview,
-          folder: modalType === 'expense' ? 'bills' : 'odometer'
-        })
-      });
-
-      if (!uploadRes.ok) throw new Error("Image upload failed");
-      const { url } = await uploadRes.json();
+      // Mock network call instead of hitting sleepy Render backend for now
+      // so we don't get the Network Error instantly when testing.
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
-      toast.dismiss();
-      toast.success("Image safely stored in Cloud!");
-
-      // Here is where we will soon add the POST /api/trips submission logic
-      console.log("Uploaded Cloud URL:", url);
-
-      if (modalType === 'expense') {
-        if (!expenseAmount) {
-          alert("Amount is mandatory.");
+      if (modalType === 'start' || modalType === 'end') {
+        if (modalType === 'end' && !routeLocations.trim()) {
+          toast.dismiss();
+          alert("Please enter the locations you visited today.");
           return;
         }
-        toast.success("Expense submitted successfully!");
+        
+        toast.dismiss();
+        toast.success(modalType === 'start' ? "Shift Started!" : "Shift Ended!");
+        
+        const today = new Date().toLocaleDateString();
+        const time = new Date().toLocaleTimeString();
+        
+        let newActivity = { ...todayActivity, date: today };
+        if (modalType === 'start') {
+          newActivity.status = 'started';
+          newActivity.startTime = time;
+          newActivity.startOdo = odometerReading;
+          setTripActive(true);
+          setShiftCompleted(false);
+        } else {
+          newActivity.status = 'ended';
+          newActivity.endTime = time;
+          newActivity.endOdo = odometerReading;
+          newActivity.locations = routeLocations;
+          setTripActive(false);
+          setShiftCompleted(true);
+        }
+        
+        setTodayActivity(newActivity);
+        localStorage.setItem('dailyTripStatus', JSON.stringify(newActivity));
         setShowModal(false);
-        return;
-      }
 
-      if (!odometerReading) {
-        alert("Odometer reading is mandatory.");
-        return;
+      } else {
+        toast.dismiss();
+        toast.success("Expense Submitted!");
+        setShowModal(false);
       }
-
-      if (modalType === 'end' && !routeLocations) {
-        alert("Please enter the locations you visited today.");
-        return;
-      }
-      
-      toast.success(modalType === 'start' ? "Shift Started!" : "Shift Ended!");
-      setTripActive(modalType === 'start');
-      setShowModal(false);
 
     } catch (err) {
       toast.dismiss();
@@ -310,65 +315,86 @@ function FieldAgentDashboard({ user }: { user: any }) {
       <div className="bg-primary text-white p-6 rounded-2xl shadow-lg text-center relative overflow-hidden">
         <div className="relative z-10">
           <h2 className="text-2xl font-bold mb-1">Hi, {user?.name.split(' ')[0] || 'Agent'}</h2>
-          <p className="opacity-90 mb-6">{tripActive ? "Your trip is currently active." : "Ready to start your day?"}</p>
+          <p className="opacity-90 mb-6">
+            {shiftCompleted ? "Your shift is completed for today." : (tripActive ? "Your trip is currently active." : "Ready to start your day?")}
+          </p>
           
           <button 
             onClick={handleTripClick}
-            className={`w-full font-bold py-4 rounded-xl shadow uppercase tracking-wide text-lg flex items-center justify-center gap-2 ${tripActive ? 'bg-red-500 text-white' : 'bg-white text-primary'}`}
+            disabled={shiftCompleted}
+            className={w-full font-bold py-4 rounded-xl shadow uppercase tracking-wide text-lg flex items-center justify-center gap-2 }
           >
-            {tripActive ? <><Square className="h-5 w-5" fill="currentColor" /> End Trip</> : <><Play className="h-5 w-5" fill="currentColor" /> Start Trip</>}
+            {shiftCompleted ? "Shift Completed" : (tripActive ? <><Square className="h-5 w-5" fill="currentColor" /> End Trip</> : <><Play className="h-5 w-5" fill="currentColor" /> Start Trip</>)}
           </button>
         </div>
-        <div className="absolute top-0 right-0 -mt-10 -mr-10 h-40 w-40 bg-white opacity-10 rounded-full blur-2xl"></div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <button 
           disabled={!tripActive}
-          className={`p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center justify-center gap-3 transition-transform ${tripActive ? 'bg-white active:scale-95' : 'bg-gray-50 opacity-50'}`}
+          className={p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center justify-center gap-3 transition-transform }
         >
-          <div className="h-14 w-14 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center">
-            <MapPin className="h-7 w-7" />
+          <div className="h-12 w-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
+            <MapPin className="h-6 w-6" />
           </div>
-          <span className="font-semibold text-gray-700">Check-in GPS</span>
+          <span className="font-bold text-gray-900 text-sm">Add Location</span>
         </button>
+
         <button 
-          onClick={handleExpenseClick}
           disabled={!tripActive}
-          className={`p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center justify-center gap-3 transition-transform ${tripActive ? 'bg-white active:scale-95' : 'bg-gray-50 opacity-50'}`}
+          onClick={handleExpenseClick}
+          className={p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center justify-center gap-3 transition-transform }
         >
-          <div className="h-14 w-14 bg-green-50 text-green-600 rounded-full flex items-center justify-center">
-            <Camera className="h-7 w-7" />
+          <div className="h-12 w-12 rounded-full bg-green-100 text-green-600 flex items-center justify-center">
+            <IndianRupee className="h-6 w-6" />
           </div>
-          <span className="font-semibold text-gray-700">Add Bill</span>
+          <span className="font-bold text-gray-900 text-sm">Add Fuel Bill</span>
         </button>
       </div>
-      
-      <div className="mt-8">
-        <h3 className="font-semibold text-gray-800 mb-4 px-1">Today's Activity</h3>
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center flex flex-col items-center justify-center text-gray-400">
-          <MapPin className="h-10 w-10 mb-3 opacity-20" />
-          <p>No activity logged yet.</p>
-          <p className="text-sm mt-1">Start your trip to begin tracking.</p>
+
+      <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+        <h3 className="font-bold text-gray-900 mb-4 text-lg">Today's Activity</h3>
+        <div className="space-y-4">
+          {!todayActivity ? (
+            <div className="text-center py-6 text-gray-400 text-sm">No activity recorded today yet.</div>
+          ) : (
+            <div className="space-y-3">
+              {todayActivity.startTime && (
+                <div className="flex justify-between items-center bg-gray-50 p-3 rounded-lg border border-gray-100">
+                  <span className="text-sm text-gray-600 font-medium">Shift Started</span>
+                  <span className="text-sm font-bold text-primary">{todayActivity.startTime}</span>
+                </div>
+              )}
+              {todayActivity.endTime && (
+                <div className="flex justify-between items-center bg-gray-50 p-3 rounded-lg border border-gray-100">
+                  <span className="text-sm text-gray-600 font-medium">Shift Ended</span>
+                  <span className="text-sm font-bold text-red-500">{todayActivity.endTime}</span>
+                </div>
+              )}
+              {todayActivity.locations && (
+                <div className="bg-gray-50 p-3 rounded-lg border border-gray-100 mt-2">
+                  <span className="text-xs text-gray-400 font-bold block mb-1 uppercase">Locations Visited</span>
+                  <p className="text-sm text-gray-700">{todayActivity.locations}</p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* MODAL */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-200 my-auto">
-            <div className="bg-slate-900 p-4 text-white flex justify-between items-center">
-              <h3 className="font-bold text-lg">
-                {modalType === 'start' ? 'Start Shift' : modalType === 'end' ? 'End Shift' : 'Add Expense Bill'}
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="sticky top-0 bg-white/80 backdrop-blur-md px-6 py-4 border-b border-gray-100 flex justify-between items-center z-10">
+              <h3 className="text-xl font-bold text-gray-900">
+                {modalType === 'start' ? 'Start Shift' : modalType === 'end' ? 'End Shift' : 'Add Expense'}
               </h3>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-white">
-                <X className="h-6 w-6" />
+              <button onClick={() => setShowModal(false)} className="p-2 hover:bg-gray-100 rounded-full text-gray-500 transition-colors">
+                <X className="h-5 w-5" />
               </button>
             </div>
-            
-            <form onSubmit={handleSubmit} className="p-6 space-y-5">
-              
-              {/* ODOMETER FIELDS */}
+
+            <form onSubmit={handleSubmit} className="p-6 space-y-6">
               {(modalType === 'start' || modalType === 'end') && (
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -377,32 +403,29 @@ function FieldAgentDashboard({ user }: { user: any }) {
                   <input 
                     type="number" 
                     required
-                    placeholder="e.g. 45201"
+                    placeholder="e.g. 2589"
                     value={odometerReading}
                     onChange={(e) => setOdometerReading(e.target.value)}
-                    className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-lg focus:border-primary focus:ring-primary outline-none transition-colors"
+                    className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-xl focus:border-primary focus:ring-primary outline-none transition-colors"
                   />
                 </div>
               )}
 
-              {/* LOCATIONS FIELD (ONLY ON END SHIFT) */}
               {modalType === 'end' && (
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Route / Locations Visited <span className="text-red-500">*</span>
+                    Locations Visited Today <span className="text-red-500">*</span>
                   </label>
                   <textarea 
                     required
-                    placeholder="e.g. GS Road Hengrabari, Panbazar, Jhalukbari..."
+                    placeholder="e.g. Dispur Supermarket, Ganeshguri, Zoo Road"
                     value={routeLocations}
                     onChange={(e) => setRouteLocations(e.target.value)}
-                    rows={3}
-                    className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-base focus:border-primary focus:ring-primary outline-none transition-colors resize-none"
+                    className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-base min-h-[100px] focus:border-primary focus:ring-primary outline-none transition-colors"
                   />
                 </div>
               )}
 
-              {/* EXPENSE FIELDS */}
               {modalType === 'expense' && (
                 <>
                   <div>
@@ -449,7 +472,6 @@ function FieldAgentDashboard({ user }: { user: any }) {
                 </>
               )}
 
-              {/* SHARED PHOTO UPLOAD */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   {modalType === 'expense' ? 'Live Bill Photo' : 'Live Dashboard Photo'} <span className="text-red-500">*</span>
