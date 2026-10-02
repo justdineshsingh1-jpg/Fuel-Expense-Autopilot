@@ -207,7 +207,7 @@ export default function ApprovalsPage() {
                             </h4>
                             <div className="bg-white p-3 rounded-md border border-gray-200 h-full max-h-[220px] overflow-y-auto">
                               <div className="relative border-l-2 border-primary ml-3 space-y-4 py-2">
-                                {row.waypoints.map((wp, idx) => (
+                                {row.waypoints.map((wp: string, idx: number) => (
                                   <div key={idx} className="relative pl-4">
                                     <span className="absolute -left-[9px] top-1 h-4 w-4 rounded-full border-2 border-primary bg-white"></span>
                                     <p className="text-sm font-medium text-gray-800">{wp}</p>
@@ -224,7 +224,7 @@ export default function ApprovalsPage() {
                             </h4>
                             {row.fraudFlags.length > 0 ? (
                               <div className="space-y-2">
-                                {row.fraudFlags.map(f => (
+                                {row.fraudFlags.map((f: any) => (
                                   <div key={f.id} className="bg-red-50 border border-red-200 rounded-md p-3">
                                     <div className="flex items-center gap-2 mb-1">
                                       <Badge variant="flagged" className="bg-red-100 text-red-700">{f.severity}</Badge>
@@ -262,6 +262,7 @@ export default function ApprovalsPage() {
     </div>
   );
 }
+
 
 
 
