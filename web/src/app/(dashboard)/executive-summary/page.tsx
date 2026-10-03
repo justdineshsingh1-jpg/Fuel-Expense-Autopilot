@@ -6,14 +6,48 @@ import { Button } from '@/components/ui/Button';
 import { ShieldCheck, Download, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 import toast from 'react-hot-toast';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+import * as XLSX from 'xlsx';
+import { FileSpreadsheet } from 'lucide-react';
 
 export default function ExecutiveSummaryPage() {
   const handleApproveAll = () => {
     toast.success('Successfully approved 145 clean claims.');
   };
 
-  const handleExport = () => {
-    toast.success('Executive Summary PDF downloading...');
+  const handleExportPDF = () => {
+    const doc = new jsPDF();
+    doc.text("Executive Summary - Fuel Autopilot", 14, 20);
+    
+    // We will export the department table as an example
+    const tableColumn = ["Department", "Total Claims", "Clean", "Flagged", "Total Amount"];
+    const tableRows = [
+      ["Sales", "0", "0", "0", "Rs. 0"],
+      ["Operations", "0", "0", "0", "Rs. 0"],
+      ["Service", "0", "0", "0", "Rs. 0"]
+    ];
+
+    (doc as any).autoTable({
+      head: [tableColumn],
+      body: tableRows,
+      startY: 30,
+    });
+    
+    doc.save("Executive_Summary.pdf");
+    toast.success('PDF Downloaded!');
+  };
+
+  const handleExportExcel = () => {
+    const ws = XLSX.utils.json_to_sheet([
+      { Department: "Sales", "Total Claims": 0, "Clean": 0, "Flagged": 0, "Total Amount": 0 },
+      { Department: "Operations", "Total Claims": 0, "Clean": 0, "Flagged": 0, "Total Amount": 0 },
+      { Department: "Service", "Total Claims": 0, "Clean": 0, "Flagged": 0, "Total Amount": 0 }
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Summary");
+    XLSX.writeFile(wb, "Executive_Summary.xlsx");
+    toast.success('Excel Downloaded!');
   };
 
   return (
@@ -23,9 +57,14 @@ export default function ExecutiveSummaryPage() {
           <h2 className="text-2xl font-bold tracking-tight text-gray-900">Executive Summary</h2>
           <p className="text-gray-500">Company-wide fuel expense overview for Managing Director approval.</p>
         </div>
-        <Button variant="outline" onClick={handleExport}>
-          <Download className="mr-2 h-4 w-4" /> Export PDF
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExportExcel} className="border-green-200 text-green-700 hover:bg-green-50">
+            <FileSpreadsheet className="mr-2 h-4 w-4" /> Export Excel
+          </Button>
+          <Button variant="outline" onClick={handleExportPDF}>
+            <Download className="mr-2 h-4 w-4" /> Export PDF
+          </Button>
+        </div>
       </div>
 
       {/* High-Level Overview */}

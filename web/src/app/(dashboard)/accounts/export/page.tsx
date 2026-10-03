@@ -8,17 +8,24 @@ import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import { Download, FileSpreadsheet, FileJson } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import toast from 'react-hot-toast';
+import * as XLSX from 'xlsx';
 
-const mockExportData = [
-  { id: '1', voucherDate: '2024-02-28', ledgerName: 'Fuel Expenses', empCode: 'EMP842', empName: 'Priya Patel', distance: 850, amount: 8500, dr: 8500, cr: 0 },
-  { id: '2', voucherDate: '2024-02-28', ledgerName: 'Staff Advance - EMP842', empCode: 'EMP842', empName: 'Priya Patel', distance: 0, amount: 8500, dr: 0, cr: 8500 },
-];
+const mockExportData: any[] = [];
 
 export default function ExportCenterPage() {
   const [format, setFormat] = useState('tally-csv');
 
   const handleExport = () => {
-    toast.success(`Data exported in ${format} format successfully`);
+    const ws = XLSX.utils.json_to_sheet(mockExportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Export");
+    
+    if (format === 'tally-csv') {
+      XLSX.writeFile(wb, "Tally_Export.csv");
+    } else {
+      XLSX.writeFile(wb, "Accounting_Export.xlsx");
+    }
+    toast.success(`Data exported as ${format} successfully`);
   };
 
   return (
