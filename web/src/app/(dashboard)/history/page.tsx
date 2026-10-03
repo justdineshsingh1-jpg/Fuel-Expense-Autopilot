@@ -5,36 +5,44 @@ import { useAuthStore } from '@/lib/store';
 import { MapPin, Calendar, Clock, IndianRupee } from 'lucide-react';
 import { ImageViewer } from '@/components/ui/ImageViewer';
 
-const mockHistoryData = [
-  {
-    id: 'TRP-1042',
-    date: '2024-03-12',
-    status: 'Approved',
-    locations: 'Dispur Supermarket, Ganeshguri Flyover Panels, Beltola Tiniali',
-    distance: '45.2',
-    fuelAmount: 450,
-    startTime: '09:15 AM',
-    endTime: '06:30 PM',
-    mapImage: 'https://images.unsplash.com/photo-1524661135-423995f22d0b?w=800&q=80',
-    odometerImage: 'https://images.unsplash.com/photo-1599423689404-5154ee0d2023?w=400&q=80'
-  },
-  {
-    id: 'TRP-1038',
-    date: '2024-03-11',
-    status: 'Pending',
-    locations: 'Zoo Road Panels, Commerce College Bylanes, Chandmari',
-    distance: '28.5',
-    fuelAmount: 0,
-    startTime: '10:00 AM',
-    endTime: '05:45 PM',
-    mapImage: 'https://images.unsplash.com/photo-1524661135-423995f22d0b?w=800&q=80',
-    odometerImage: 'https://images.unsplash.com/photo-1599423689404-5154ee0d2023?w=400&q=80'
-  }
-];
+
 
 export default function HistoryPage() {
   const { user } = useAuthStore();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [historyData, setHistoryData] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  React.useEffect(() => {
+    if (!user) return;
+    fetch('/api/trips')
+      .then(r => r.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          // Filter trips for this agent
+          const myTrips = data.filter(t => t.user_id === user.id || t.agent_id === user.id);
+          
+          // Map DB structure to UI structure
+          const formatted = myTrips.map(t => {
+            const distance = ((t.end_reading || 0) - (t.start_reading || 0)).toFixed(1);
+            return {
+              id: t.id,
+              date: t.created_at || t.start_capture_timestamp || new Date().toISOString(),
+              status: t.approval_status || 'pending',
+              locations: t.locations_visited || 'Route tracking completed.',
+              distance: Number(distance) > 0 ? distance : '0.0',
+              fuelAmount: t.fuel_amount || 0,
+              startTime: t.start_capture_timestamp ? new Date(t.start_capture_timestamp).toLocaleTimeString('en-IN', {hour: '2-digit', minute:'2-digit'}) : 'N/A',
+              endTime: t.created_at ? new Date(t.created_at).toLocaleTimeString('en-IN', {hour: '2-digit', minute:'2-digit'}) : 'N/A',
+              mapImage: t.map_history_url || 'https://images.unsplash.com/photo-1524661135-423995f22d0b?w=800&q=80',
+              odometerImage: t.end_odometer_url || t.start_odometer_url || 'https://images.unsplash.com/photo-1599423689404-5154ee0d2023?w=400&q=80'
+            };
+          });
+          setHistoryData(formatted);
+        }
+      })
+      .finally(() => setIsLoading(false));
+  }, [user]);
 
   if (user?.role !== 'field_agent') {
     return <div className="p-8 text-center text-gray-500">Only field agents can access this specific view.</div>;
@@ -45,12 +53,14 @@ export default function HistoryPage() {
       <div className="flex items-center justify-between px-1">
         <h1 className="text-2xl font-bold text-gray-900">My History</h1>
         <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-sm font-semibold">
-          March 2024
+          {new Date().toLocaleString('default', { month: 'long', year: 'numeric' })}
         </span>
       </div>
 
       <div className="space-y-4">
-        {mockHistoryData.map((trip) => (
+        {historyData.length === 0 && !isLoading && <div className="text-center p-8 text-gray-500 bg-white rounded-2xl border border-gray-100 shadow-sm">No trips found for this month. Start a trip to see history here!</div>}
+        {isLoading && <div className="text-center p-8 text-gray-500">Loading history...</div>}
+        {historyData.map((trip) => (
           <div 
             key={trip.id} 
             className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"
@@ -60,7 +70,7 @@ export default function HistoryPage() {
               onClick={() => setExpandedId(expandedId === trip.id ? null : trip.id)}
             >
               <div className="flex items-center gap-4">
-                <div className={`h-12 w-12 rounded-full flex items-center justify-center ${trip.status === 'Approved' ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600'}`}>
+                <div className={`h-12 w-12 rounded-full flex items-center justify-center ${trip.status?.toLowerCase() === 'approved' ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600'}`}>
                   <Calendar className="h-6 w-6" />
                 </div>
                 <div>
@@ -69,8 +79,8 @@ export default function HistoryPage() {
                 </div>
               </div>
               <div className="text-right">
-                <span className={`text-xs font-bold uppercase tracking-wider ${trip.status === 'Approved' ? 'text-green-600' : 'text-orange-500'}`}>
-                  {trip.status}
+                <span className={`text-xs font-bold uppercase tracking-wider ${trip.status?.toLowerCase() === 'approved' ? 'text-green-600' : 'text-orange-500'}`}>
+                  {trip.status?.toUpperCase()}
                 </span>
                 {trip.fuelAmount > 0 && (
                   <p className="text-sm font-semibold text-gray-700 mt-1 flex items-center justify-end gap-1">
