@@ -176,14 +176,15 @@ function FieldAgentDashboard({ user }: { user: any }) {
     }
   };
 
-        const handleSubmit = async (e: React.FormEvent) => {
+            const handleSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!photoPreview) {
         alert("A live photo is mandatory.");
         return;
       }
-      toast.loading("Uploading securely to cloud...");
+      toast.loading("Processing your submission...");
       try {
+        // 1. Upload to Supabase Storage (Serverless)
         const base64Data = photoPreview.split(',')[1];
         const byteCharacters = atob(base64Data);
         const byteNumbers = new Array(byteCharacters.length);
@@ -205,15 +206,78 @@ function FieldAgentDashboard({ user }: { user: any }) {
           body: blob
         });
         
-        if (!uploadRes.ok) throw new Error("Upload failed: " + await uploadRes.text());
+        if (!uploadRes.ok) throw new Error("Upload failed");
         
+        // Construct the public URL
+        const imageUrl = "https://isjsbwjxvpmmgwvvksit.supabase.co/storage/v1/object/public/fuel-receipts/" + filename;
+        
+        // 2. Save data to Vercel Serverless Database API
+        if (modalType === 'expense') {
+           const expRes = await fetch('/api/expenses', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                 agent_id: user.id || 'AG1001',
+                 type: expenseType,
+                 amount: parseFloat(expenseAmount),
+                 remarks: expenseRemarks,
+                 receipt_url: imageUrl,
+                 status: 'pending'
+              })
+           });
+           if (!expRes.ok) throw new Error("Failed to save expense");
+        } else {
+           // Trip Start/End
+           const tripPayload: any = {
+              agent_id: user.id || 'AG1001',
+              status: modalType === 'start' ? 'active' : 'completed',
+              route_map_image_url: imageUrl
+           };
+           if (modalType === 'start') {
+              tripPayload.start_odometer = parseFloat(odometerReading);
+              tripPayload.start_time = new Date().toISOString();
+           } else {
+              tripPayload.end_odometer = parseFloat(odometerReading);
+              tripPayload.end_time = new Date().toISOString();
+           }
+           
+           const tripRes = await fetch('/api/trips', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(tripPayload)
+           });
+           if (!tripRes.ok) throw new Error("Failed to save trip");
+        }
+        
+        // 3. Update Local Storage for UI State
+        if (modalType === 'start' || modalType === 'end') {
+          const today = new Date().toLocaleDateString();
+          const time = new Date().toLocaleTimeString();
+          let newActivity = { ...todayActivity, date: today };
+          if (modalType === 'start') {
+            newActivity.status = 'started';
+            newActivity.startTime = time;
+            newActivity.startOdo = odometerReading;
+            setTripActive(true);
+            setShiftCompleted(false);
+          } else {
+            newActivity.status = 'ended';
+            newActivity.endTime = time;
+            newActivity.endOdo = odometerReading;
+            newActivity.locations = routeLocations;
+            setTripActive(false);
+            setShiftCompleted(true);
+          }
+          setTodayActivity(newActivity);
+          localStorage.setItem('dailyTripStatus', JSON.stringify(newActivity));
+        }
+
         toast.dismiss();
         toast.success(modalType === 'start' ? "Shift Started!" : (modalType === 'end' ? "Shift Ended!" : "Expense Submitted!"));
-        setTripActive(modalType === 'start');
         setShowModal(false);
       } catch (err) {
         toast.dismiss();
-        toast.error("Network error during upload. Please try again.");
+        toast.error("Error submitting data. Please try again.");
         console.error(err);
       }
     };
