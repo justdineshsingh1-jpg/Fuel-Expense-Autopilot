@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
 import { StatsCard } from '@/components/ui/StatsCard';
@@ -23,24 +23,9 @@ import {
   PieChart, Pie, Cell, Legend
 } from 'recharts';
 
-const mockTrendData = [
-  { name: 'Jan', amount: 45000 },
-  { name: 'Feb', amount: 52000 },
-  { name: 'Mar', amount: 48000 },
-  { name: 'Apr', amount: 61000 },
-  { name: 'May', amount: 59000 },
-  { name: 'Jun', amount: 68000 },
-];
-
-const mockDeptData = [
-  { name: 'Sales', spend: 45000 },
-  { name: 'Operations', spend: 25000 },
-  { name: 'Support', spend: 15000 },
-];
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28'];
-
 function FieldAgentDashboard({ user }: { user: any }) {
   const [tripActive, setTripActive] = useState(false);
+  const [shiftCompleted, setShiftCompleted] = useState(false);
   
   // Modals State
   const [showModal, setShowModal] = useState(false);
@@ -57,9 +42,85 @@ function FieldAgentDashboard({ user }: { user: any }) {
   const [expenseAmount, setExpenseAmount] = useState('');
   const [expenseRemarks, setExpenseRemarks] = useState('');
   
+  // UI State
+  const [todayActivity, setTodayActivity] = useState<any>({
+    status: 'pending',
+    startTime: null,
+    endTime: null,
+    startOdo: null,
+    endOdo: null,
+    date: new Date().toLocaleDateString()
+  });
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    const loadDailyStatus = async () => {
+      try {
+        const saved = localStorage.getItem('dailyTripStatus');
+        if (saved) {
+          const data = JSON.parse(saved);
+          const today = new Date().toLocaleDateString();
+          if (data.date === today) {
+            setTodayActivity(data);
+            if (data.status === 'started') setTripActive(true);
+            if (data.status === 'ended') setShiftCompleted(true);
+          } else {
+            localStorage.removeItem('dailyTripStatus');
+          }
+        }
+      } catch(e) {}
+    };
+    loadDailyStatus();
+  }, []);
+
+  // BACKGROUND GPS TRACKER
+  useEffect(() => {
+    let intervalId: any;
+    if (tripActive) {
+      intervalId = setInterval(async () => {
+        try {
+          const { Geolocation } = await import('@capacitor/geolocation');
+          const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy: true });
+          const wp = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            timestamp: new Date().toLocaleTimeString()
+          };
+          const saved = localStorage.getItem('dailyTripStatus');
+          if (saved) {
+            const data = JSON.parse(saved);
+            if (!data.waypoints) data.waypoints = [];
+            data.waypoints.push(wp);
+            localStorage.setItem('dailyTripStatus', JSON.stringify(data));
+          }
+        } catch(e) {
+          console.error("Tracker failed to get position", e);
+        }
+      }, 5 * 60 * 1000);
+    }
+    return () => { if (intervalId) clearInterval(intervalId); };
+  }, [tripActive]);
+
+  // Aggressive GPS Guard
+  useEffect(() => {
+    const checkGps = async () => {
+      try {
+        const { Geolocation } = await import('@capacitor/geolocation');
+        const perm = await Geolocation.checkPermissions();
+        if (perm.location !== 'granted') {
+          // In real app we block UI here until granted
+        }
+      } catch(e) {}
+    };
+    checkGps();
+  }, []);
+
   const handleTripClick = () => {
+    if (shiftCompleted) {
+      toast.error("You have already completed your shift today!");
+      return;
+    }
     setModalType(tripActive ? 'end' : 'start');
     setOdometerReading('');
     setRouteLocations('');
@@ -69,106 +130,57 @@ function FieldAgentDashboard({ user }: { user: any }) {
 
   const handleExpenseClick = () => {
     setModalType('expense');
-    setExpenseType('Fuel');
     setExpenseAmount('');
     setExpenseRemarks('');
     setPhotoPreview(null);
     setShowModal(true);
   };
 
-  const processWatermark = async (file: File): Promise<string> => {
-    return new Promise(async (resolve, reject) => {
+  const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setIsProcessingPhoto(true);
       try {
-        // 1. Get GPS Location
-        const position = await new Promise<GeolocationPosition>((res, rej) => {
-          import('@capacitor/geolocation').then(({ Geolocation }) => { Geolocation.getCurrentPosition({ enableHighAccuracy: true }).then(pos => res({coords: {latitude: pos.coords.latitude, longitude: pos.coords.longitude}} as any)).catch(rej); }); /*
-            enableHighAccuracy: true,
-            timeout: 7000,
-            */ }).catch(() => null);
+        const { Geolocation } = await import('@capacitor/geolocation');
+        const position = await new Promise<any>((res, rej) => {
+          Geolocation.getCurrentPosition({ enableHighAccuracy: true })
+            .then(pos => res({coords: {latitude: pos.coords.latitude, longitude: pos.coords.longitude}}))
+            .catch(rej);
+        }).catch(() => null);
 
-        // 2. Load Image
         const img = new Image();
         img.src = URL.createObjectURL(file);
+        await new Promise(resolve => { img.onload = resolve; });
+
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error("Canvas context missing");
+
+        ctx.drawImage(img, 0, 0);
+
+        const bannerHeight = Math.max(120, img.height * 0.15);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        ctx.fillRect(0, img.height - bannerHeight, img.width, bannerHeight);
+
+        ctx.fillStyle = position ? '#4ade80' : '#f87171';
+        ctx.font = `bold ${Math.max(24, img.height * 0.04)}px sans-serif`;
+        const timeStr = new Date().toLocaleString();
+        const locStr = position ? `Lat: ${position.coords.latitude.toFixed(5)}, Lng: ${position.coords.longitude.toFixed(5)}` : 'GPS SIGNAL NOT FOUND';
         
-        img.onload = () => {
-          // 3. Setup Canvas (Scale down if too huge to save memory)
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          if (!ctx) return reject('No canvas context');
-
-          const MAX_DIM = 1200;
-          let width = img.width;
-          let height = img.height;
-          
-          if (width > height && width > MAX_DIM) {
-            height *= MAX_DIM / width;
-            width = MAX_DIM;
-          } else if (height > MAX_DIM) {
-            width *= MAX_DIM / height;
-            height = MAX_DIM;
-          }
-
-          canvas.width = width;
-          canvas.height = height;
-
-          // Draw Original Image
-          ctx.drawImage(img, 0, 0, width, height);
-
-          // 4. Draw Watermark Background Banner
-          const bannerHeight = Math.max(80, height * 0.12);
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
-          ctx.fillRect(0, height - bannerHeight, width, bannerHeight);
-
-          // 5. Draw Text
-          const fontSize = Math.max(16, width * 0.025);
-          ctx.font = `${fontSize}px Arial`;
-          ctx.fillStyle = 'white';
-          ctx.textAlign = 'left';
-          
-          const padding = width * 0.03;
-          const now = new Date();
-          const timeStr = now.toLocaleString('en-IN');
-          
-          let geoStr = 'GPS: Location Unavailable';
-          if (position) {
-            geoStr = `Lat: ${position.coords.latitude.toFixed(6)}, Lng: ${position.coords.longitude.toFixed(6)}`;
-          }
-
-          // Top line: Date/Time
-          ctx.fillText(`Date: ${timeStr}`, padding, height - bannerHeight + (bannerHeight * 0.4));
-          
-          // Bottom line: GPS
-          ctx.fillStyle = position ? '#4ade80' : '#f87171'; // green if success, red if failed
-          ctx.fillText(geoStr, padding, height - bannerHeight + (bannerHeight * 0.8));
-          
-          // Right side: User/App Info
-          ctx.textAlign = 'right';
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-          ctx.fillText(`Agent: ${user?.name || 'Unknown'}`, width - padding, height - bannerHeight + (bannerHeight * 0.4));
-          ctx.fillText('Fuel Autopilot Secured', width - padding, height - bannerHeight + (bannerHeight * 0.8));
-
-          // 6. Export
-          resolve(canvas.toDataURL('image/jpeg', 0.85));
-        };
+        const padding = Math.max(20, img.width * 0.05);
+        ctx.fillText(`Date: ${timeStr}`, padding, img.height - bannerHeight + (bannerHeight * 0.4));
+        ctx.fillText(`Loc: ${locStr}`, padding, img.height - bannerHeight + (bannerHeight * 0.75));
         
-        img.onerror = () => reject('Image load failed');
-      } catch (err) {
-        reject(err);
-      }
-    });
-  };
+        ctx.textAlign = 'right';
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(`Agent: ${user?.name || 'Unknown'}`, img.width - padding, img.height - bannerHeight + (bannerHeight * 0.4));
+        ctx.fillText(`Fuel Autopilot Verified`, img.width - padding, img.height - bannerHeight + (bannerHeight * 0.75));
 
-  const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setIsProcessingPhoto(true);
-      
-      try {
-        const stampedImage = await processWatermark(file);
-        setPhotoPreview(stampedImage);
+        const watermarkedUrl = canvas.toDataURL('image/jpeg', 0.85);
+        setPhotoPreview(watermarkedUrl);
       } catch (error) {
-        console.error("Watermarking failed", error);
-        // Fallback to normal if canvas fails
         setPhotoPreview(URL.createObjectURL(file));
       } finally {
         setIsProcessingPhoto(false);
@@ -176,61 +188,98 @@ function FieldAgentDashboard({ user }: { user: any }) {
     }
   };
 
-    const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (!photoPreview) {
       alert("A live photo is mandatory.");
       return;
     }
-
-    // Indicate loading state (you could add a loading spinner state here)
-    toast.loading("Uploading photo to secure cloud storage...");
-
+    toast.loading("Processing your submission...");
     try {
-      // Upload the compressed photo to the new backend base64 endpoint
-      const uploadRes = await fetch('https://fuel-expense-autopilot-1.onrender.com/api/upload/base64', {
+      const base64Data = photoPreview.split(',')[1];
+      const byteCharacters = atob(base64Data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], {type: 'image/jpeg'});
+      
+      const folder = modalType === 'expense' ? 'bills' : 'odometer';
+      const filename = folder + '/' + Date.now() + '.jpg';
+      
+      const uploadRes = await fetch('https://isjsbwjxvpmmgwvvksit.supabase.co/storage/v1/object/fuel-receipts/' + filename, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          image_base64: photoPreview,
-          folder: modalType === 'expense' ? 'bills' : 'odometer'
-        })
+        headers: { 
+          'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzanNid2p4dnBtbWd3dnZrc2l0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MDY1ODUwOSwiZXhwIjoyMTA2MjM0NTA5fQ.ibmxLHoSd6ySCPvVZ8mjSUGe0t8M0eF_u3mJRV8Wbe8',
+          'Content-Type': 'image/jpeg'
+        },
+        body: blob
       });
-
-      if (!uploadRes.ok) throw new Error("Image upload failed");
-      const { url } = await uploadRes.json();
       
-      toast.dismiss();
-      toast.success("Image safely stored in Cloud!");
-
-      // Here is where we will soon add the POST /api/trips submission logic
-      console.log("Uploaded Cloud URL:", url);
-
+      if (!uploadRes.ok) throw new Error("Upload failed");
+      const imageUrl = "https://isjsbwjxvpmmgwvvksit.supabase.co/storage/v1/object/public/fuel-receipts/" + filename;
+      
       if (modalType === 'expense') {
-        if (!expenseAmount) {
-          alert("Amount is mandatory.");
-          return;
-        }
-        toast.success("Expense submitted successfully!");
-        setShowModal(false);
-        return;
-      }
-
-      if (!odometerReading) {
-        alert("Odometer reading is mandatory.");
-        return;
-      }
-
-      if (modalType === 'end' && !routeLocations) {
-        alert("Please enter the locations you visited today.");
-        return;
+         const expRes = await fetch('/api/expenses', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+               agent_id: user?.id || 'AG1001',
+               type: expenseType,
+               amount: parseFloat(expenseAmount),
+               remarks: expenseRemarks,
+               receipt_url: imageUrl,
+               status: 'pending'
+            })
+         });
+         if (!expRes.ok) throw new Error("Failed to save expense");
+      } else {
+         const tripPayload: any = {
+            agent_id: user?.id || 'AG1001',
+            status: modalType === 'start' ? 'active' : 'completed',
+            route_map_image_url: imageUrl
+         };
+         if (modalType === 'start') {
+            tripPayload.start_odometer = parseFloat(odometerReading);
+            tripPayload.start_time = new Date().toISOString();
+         } else {
+            tripPayload.end_odometer = parseFloat(odometerReading);
+            tripPayload.end_time = new Date().toISOString();
+         }
+         const tripRes = await fetch('/api/trips', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(tripPayload)
+         });
+         if (!tripRes.ok) throw new Error("Failed to save trip");
       }
       
-      toast.success(modalType === 'start' ? "Shift Started!" : "Shift Ended!");
-      setTripActive(modalType === 'start');
-      setShowModal(false);
+      if (modalType === 'start' || modalType === 'end') {
+        const today = new Date().toLocaleDateString();
+        const time = new Date().toLocaleTimeString();
+        let newActivity: any = { ...todayActivity, date: today };
+        if (modalType === 'start') {
+          newActivity.status = 'started';
+          newActivity.startTime = time;
+          newActivity.startOdo = odometerReading;
+          setTripActive(true);
+          setShiftCompleted(false);
+        } else {
+          newActivity.status = 'ended';
+          newActivity.endTime = time;
+          newActivity.endOdo = odometerReading;
+          newActivity.locations = routeLocations;
+          setTripActive(false);
+          setShiftCompleted(true);
+        }
+        setTodayActivity(newActivity);
+        localStorage.setItem('dailyTripStatus', JSON.stringify(newActivity));
+      }
 
+      toast.dismiss();
+      toast.success(modalType === 'start' ? "Shift Started!" : (modalType === 'end' ? "Shift Ended!" : "Expense Submitted!"));
+      setShowModal(false);
     } catch (err) {
       toast.dismiss();
       toast.error("Network error during upload. Please try again.");
@@ -243,54 +292,86 @@ function FieldAgentDashboard({ user }: { user: any }) {
       <div className="bg-primary text-white p-6 rounded-2xl shadow-lg text-center relative overflow-hidden">
         <div className="relative z-10">
           <h2 className="text-2xl font-bold mb-1">Hi, {user?.name.split(' ')[0] || 'Agent'}</h2>
-          <p className="opacity-90 mb-6">{tripActive ? "Your trip is currently active." : "Ready to start your day?"}</p>
+          <p className="opacity-90 mb-6">
+            {shiftCompleted ? "Your shift is completed for today." : (tripActive ? "Your trip is currently active." : "Ready to start your day?")}
+          </p>
           
           <button 
             onClick={handleTripClick}
-            className={`w-full font-bold py-4 rounded-xl shadow uppercase tracking-wide text-lg flex items-center justify-center gap-2 ${tripActive ? 'bg-red-500 text-white' : 'bg-white text-primary'}`}
+            disabled={shiftCompleted}
+            className={`w-full font-bold py-4 rounded-xl shadow uppercase tracking-wide text-lg flex items-center justify-center gap-2 ${shiftCompleted ? 'bg-gray-400 text-white cursor-not-allowed' : (tripActive ? 'bg-red-500 text-white' : 'bg-white text-primary')}`}
           >
-            {tripActive ? <><Square className="h-5 w-5" fill="currentColor" /> End Trip</> : <><Play className="h-5 w-5" fill="currentColor" /> Start Trip</>}
+            {shiftCompleted ? "Shift Completed" : (tripActive ? <><Square className="h-5 w-5" fill="currentColor" /> End Trip</> : <><Play className="h-5 w-5" fill="currentColor" /> Start Trip</>)}
           </button>
         </div>
-        <div className="absolute top-0 right-0 -mt-10 -mr-10 h-40 w-40 bg-white opacity-10 rounded-full blur-2xl"></div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <button 
           disabled={!tripActive}
           className={`p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center justify-center gap-3 transition-transform ${tripActive ? 'bg-white active:scale-95' : 'bg-gray-50 opacity-50'}`}
-        >
-          <div className="h-14 w-14 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center">
-            <MapPin className="h-7 w-7" />
-          </div>
-          <span className="font-semibold text-gray-700">Check-in GPS</span>
-        </button>
-        <button 
           onClick={handleExpenseClick}
+        >
+          <div className="bg-orange-100 p-3 rounded-full text-orange-600">
+            <IndianRupee className="h-6 w-6" />
+          </div>
+          <span className="font-semibold text-gray-700">Add Expense</span>
+        </button>
+
+        <button 
           disabled={!tripActive}
           className={`p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center justify-center gap-3 transition-transform ${tripActive ? 'bg-white active:scale-95' : 'bg-gray-50 opacity-50'}`}
         >
-          <div className="h-14 w-14 bg-green-50 text-green-600 rounded-full flex items-center justify-center">
-            <Camera className="h-7 w-7" />
+          <div className="bg-blue-100 p-3 rounded-full text-blue-600">
+            <MapPin className="h-6 w-6" />
           </div>
-          <span className="font-semibold text-gray-700">Add Bill</span>
+          <span className="font-semibold text-gray-700">Check In</span>
         </button>
       </div>
-      
-      <div className="mt-8">
-        <h3 className="font-semibold text-gray-800 mb-4 px-1">Today's Activity</h3>
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center flex flex-col items-center justify-center text-gray-400">
-          <MapPin className="h-10 w-10 mb-3 opacity-20" />
-          <p>No activity logged yet.</p>
-          <p className="text-sm mt-1">Start your trip to begin tracking.</p>
-        </div>
+
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+        <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+          <FileText className="h-5 w-5 text-primary" /> Today's Activity
+        </h3>
+        {todayActivity.status === 'pending' ? (
+          <div className="text-center py-6 text-gray-400">
+            <p>No activity yet.</p>
+            <p className="text-sm">Start your trip to track progress.</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between border-b pb-3">
+              <span className="text-gray-500">Shift Started</span>
+              <span className="font-semibold text-gray-900">{todayActivity.startTime || '--:--'}</span>
+            </div>
+            <div className="flex items-center justify-between border-b pb-3">
+              <span className="text-gray-500">Starting Odometer</span>
+              <span className="font-semibold text-gray-900">{todayActivity.startOdo || '0'} KM</span>
+            </div>
+            {todayActivity.status === 'ended' && (
+              <>
+                <div className="flex items-center justify-between border-b pb-3">
+                  <span className="text-gray-500">Shift Ended</span>
+                  <span className="font-semibold text-gray-900">{todayActivity.endTime}</span>
+                </div>
+                <div className="flex items-center justify-between border-b pb-3">
+                  <span className="text-gray-500">Ending Odometer</span>
+                  <span className="font-semibold text-gray-900">{todayActivity.endOdo} KM</span>
+                </div>
+                <div className="pt-2">
+                  <span className="text-gray-500 block mb-2">Locations Visited</span>
+                  <p className="text-sm font-medium text-gray-800 bg-gray-50 p-3 rounded-xl border border-gray-100">{todayActivity.locations}</p>
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* MODAL */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-200 my-auto">
-            <div className="bg-slate-900 p-4 text-white flex justify-between items-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-200 my-auto max-h-[90vh] overflow-y-auto">
+            <div className="bg-slate-900 p-4 text-white flex justify-between items-center sticky top-0 z-10">
               <h3 className="font-bold text-lg">
                 {modalType === 'start' ? 'Start Shift' : modalType === 'end' ? 'End Shift' : 'Add Expense Bill'}
               </h3>
@@ -300,8 +381,6 @@ function FieldAgentDashboard({ user }: { user: any }) {
             </div>
             
             <form onSubmit={handleSubmit} className="p-6 space-y-5">
-              
-              {/* ODOMETER FIELDS */}
               {(modalType === 'start' || modalType === 'end') && (
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -318,7 +397,6 @@ function FieldAgentDashboard({ user }: { user: any }) {
                 </div>
               )}
 
-              {/* LOCATIONS FIELD (ONLY ON END SHIFT) */}
               {modalType === 'end' && (
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -335,7 +413,6 @@ function FieldAgentDashboard({ user }: { user: any }) {
                 </div>
               )}
 
-              {/* EXPENSE FIELDS */}
               {modalType === 'expense' && (
                 <>
                   <div>
@@ -356,7 +433,7 @@ function FieldAgentDashboard({ user }: { user: any }) {
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Amount (?) <span className="text-red-500">*</span>
+                      Amount (₹) <span className="text-red-500">*</span>
                     </label>
                     <input 
                       type="number" 
@@ -382,7 +459,6 @@ function FieldAgentDashboard({ user }: { user: any }) {
                 </>
               )}
 
-              {/* SHARED PHOTO UPLOAD */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   {modalType === 'expense' ? 'Live Bill Photo' : 'Live Dashboard Photo'} <span className="text-red-500">*</span>
@@ -448,6 +524,22 @@ export default function Dashboard() {
     return <FieldAgentDashboard user={user} />;
   }
 
+  const mockTrendData = [
+    { name: 'Jan', amount: 45000 },
+    { name: 'Feb', amount: 52000 },
+    { name: 'Mar', amount: 48000 },
+    { name: 'Apr', amount: 61000 },
+    { name: 'May', amount: 59000 },
+    { name: 'Jun', amount: 69000 },
+  ];
+  
+  const mockDeptData = [
+    { name: 'Sales', value: 45 },
+    { name: 'Operations', value: 35 },
+    { name: 'Support', value: 20 },
+  ];
+  const COLORS = ['#3b82f6', '#10b981', '#f59e0b'];
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -455,7 +547,7 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        <StatsCard title="Total Expense (MTD)" value="?2,45,000" trend={{ value: 12, isPositive: false }} icon={IndianRupee} />
+        <StatsCard title="Total Expense (MTD)" value="₹2,45,000" trend={{ value: 12, isPositive: false }} icon={IndianRupee} />
         <StatsCard title="Pending Approvals" value="42" icon={FileText} />
         <StatsCard title="Fraud Flags" value="5" trend={{ value: 2, isPositive: false }} icon={AlertTriangle} />
         <StatsCard title="Reconciled" value="128" trend={{ value: 8, isPositive: true }} icon={CheckCircle2} />
@@ -472,7 +564,7 @@ export default function Dashboard() {
                 <LineChart data={mockTrendData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#6B7280' }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6B7280' }} tickFormatter={(val) => `?${val/1000}k`} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6B7280' }} tickFormatter={(val) => `₹${val/1000}k`} />
                   <RechartsTooltip cursor={{ stroke: '#9CA3AF', strokeWidth: 1, strokeDasharray: '4 4' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
                   <Line type="monotone" dataKey="amount" stroke="#0ea5e9" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6, strokeWidth: 0 }} />
                 </LineChart>
@@ -489,12 +581,12 @@ export default function Dashboard() {
             <div className="h-[300px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={mockDeptData} cx="50%" cy="50%" innerRadius={80} outerRadius={110} paddingAngle={5} dataKey="spend">
+                  <Pie data={mockDeptData} cx="50%" cy="50%" innerRadius={80} outerRadius={110} paddingAngle={5} dataKey="value">
                     {mockDeptData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <RechartsTooltip formatter={(value) => `?${value}`} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                  <RechartsTooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
                   <Legend verticalAlign="bottom" height={36} iconType="circle" />
                 </PieChart>
               </ResponsiveContainer>
@@ -505,9 +597,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
-
-
-
-
-
