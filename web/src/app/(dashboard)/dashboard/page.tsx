@@ -547,20 +547,9 @@ export default function Dashboard() {
     return <FieldAgentDashboard user={user} />;
   }
 
-  const mockTrendData = [
-    { name: 'Jan', amount: 45000 },
-    { name: 'Feb', amount: 52000 },
-    { name: 'Mar', amount: 48000 },
-    { name: 'Apr', amount: 61000 },
-    { name: 'May', amount: 59000 },
-    { name: 'Jun', amount: 69000 },
-  ];
+  const mockTrendData = [{ name: 'Today', amount: 0 }];
   
-  const mockDeptData = [
-    { name: 'Sales', value: 45 },
-    { name: 'Operations', value: 35 },
-    { name: 'Support', value: 20 },
-  ];
+  const mockDeptData = [{ name: 'No Data', value: 1 }];
   const COLORS = ['#3b82f6', '#10b981', '#f59e0b'];
 
   return (
@@ -570,10 +559,10 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        <StatsCard title="Total Expense (MTD)" value="₹2,45,000" trend={{ value: 12, isPositive: false }} icon={IndianRupee} />
-        <StatsCard title="Pending Approvals" value="42" icon={FileText} />
-        <StatsCard title="Fraud Flags" value="5" trend={{ value: 2, isPositive: false }} icon={AlertTriangle} />
-        <StatsCard title="Reconciled" value="128" trend={{ value: 8, isPositive: true }} icon={CheckCircle2} />
+        <StatsCard title="Total Expense (MTD)" value="₹0" trend={{ value: 12, isPositive: false }} icon={IndianRupee} />
+        <StatsCard title="Pending Approvals" value="0" icon={FileText} />
+        <StatsCard title="Fraud Flags" value="0" trend={{ value: 2, isPositive: false }} icon={AlertTriangle} />
+        <StatsCard title="Reconciled" value="0" trend={{ value: 8, isPositive: true }} icon={CheckCircle2} />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

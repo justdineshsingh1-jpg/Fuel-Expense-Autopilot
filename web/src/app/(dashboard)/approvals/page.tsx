@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -22,9 +22,16 @@ import {
 import toast from 'react-hot-toast';
 
 // Mock data
-const mockData: any[] = [];
 
 export default function ApprovalsPage() {
+  const [trips, setTrips] = useState<any[]>([]);
+  
+  useEffect(() => {
+    fetch('/api/trips').then(r => r.json()).then(data => {
+      if (Array.isArray(data)) setTrips(data);
+    }).catch(e => console.error(e));
+  }, []);
+
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
 
@@ -43,10 +50,10 @@ export default function ApprovalsPage() {
   };
 
   const toggleSelectAll = () => {
-    if (selectedRows.size === mockData.length) {
+    if (selectedRows.size === trips.length) {
       setSelectedRows(new Set());
     } else {
-      setSelectedRows(new Set(mockData.map(d => d.id)));
+      setSelectedRows(new Set(trips.map(d => d.id)));
     }
   };
 
@@ -101,7 +108,7 @@ export default function ApprovalsPage() {
                   <input 
                     type="checkbox" 
                     className="rounded border-gray-300 text-primary focus:ring-primary"
-                    checked={selectedRows.size === mockData.length && mockData.length > 0}
+                    checked={selectedRows.size === trips.length && trips.length > 0}
                     onChange={toggleSelectAll}
                   />
                 </th>
@@ -116,7 +123,7 @@ export default function ApprovalsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
-              {mockData.map((row) => (
+              {trips.map((row) => (
                 <React.Fragment key={row.id}>
                   <tr className={cn("hover:bg-gray-50 transition-colors", expandedRows.has(row.id) && "bg-gray-50")}>
                     <td className="px-4 py-3">
