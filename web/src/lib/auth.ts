@@ -1,6 +1,6 @@
 import { User, Role } from './types';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://fuel-expense-autopilot-1.onrender.com/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 export const loginWithBackend = async (email: string, password: string):Promise<User> => {
   try {
