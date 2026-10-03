@@ -176,69 +176,49 @@ function FieldAgentDashboard({ user }: { user: any }) {
     }
   };
 
-    const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!photoPreview) {
-      alert("A live photo is mandatory.");
-      return;
-    }
-
-    // Indicate loading state (you could add a loading spinner state here)
-    toast.loading("Uploading photo to secure cloud storage...");
-
-    try {
-      // Upload the compressed photo to the new backend base64 endpoint
-      const uploadRes = await fetch('https://fuel-expense-autopilot-1.onrender.com/api/upload/base64', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          image_base64: photoPreview,
-          folder: modalType === 'expense' ? 'bills' : 'odometer'
-        })
-      });
-
-      if (!uploadRes.ok) throw new Error("Image upload failed");
-      const { url } = await uploadRes.json();
-      
-      toast.dismiss();
-      toast.success("Image safely stored in Cloud!");
-
-      // Here is where we will soon add the POST /api/trips submission logic
-      console.log("Uploaded Cloud URL:", url);
-
-      if (modalType === 'expense') {
-        if (!expenseAmount) {
-          alert("Amount is mandatory.");
-          return;
+        const handleSubmit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!photoPreview) {
+        alert("A live photo is mandatory.");
+        return;
+      }
+      toast.loading("Uploading securely to cloud...");
+      try {
+        const base64Data = photoPreview.split(',')[1];
+        const byteCharacters = atob(base64Data);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
         }
-        toast.success("Expense submitted successfully!");
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], {type: 'image/jpeg'});
+        
+        const folder = modalType === 'expense' ? 'bills' : 'odometer';
+        const filename = folder + '/' + Date.now() + '.jpg';
+        
+        const uploadRes = await fetch('https://isjsbwjxvpmmgwvvksit.supabase.co/storage/v1/object/fuel-receipts/' + filename, {
+          method: 'POST',
+          headers: { 
+            'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzanNid2p4dnBtbWd3dnZrc2l0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MDY1ODUwOSwiZXhwIjoyMTA2MjM0NTA5fQ.ibmxLHoSd6ySCPvVZ8mjSUGe0t8M0eF_u3mJRV8Wbe8',
+            'Content-Type': 'image/jpeg'
+          },
+          body: blob
+        });
+        
+        if (!uploadRes.ok) throw new Error("Upload failed: " + await uploadRes.text());
+        
+        toast.dismiss();
+        toast.success(modalType === 'start' ? "Shift Started!" : (modalType === 'end' ? "Shift Ended!" : "Expense Submitted!"));
+        setTripActive(modalType === 'start');
         setShowModal(false);
-        return;
+      } catch (err) {
+        toast.dismiss();
+        toast.error("Network error during upload. Please try again.");
+        console.error(err);
       }
+    };
 
-      if (!odometerReading) {
-        alert("Odometer reading is mandatory.");
-        return;
-      }
-
-      if (modalType === 'end' && !routeLocations) {
-        alert("Please enter the locations you visited today.");
-        return;
-      }
-      
-      toast.success(modalType === 'start' ? "Shift Started!" : "Shift Ended!");
-      setTripActive(modalType === 'start');
-      setShowModal(false);
-
-    } catch (err) {
-      toast.dismiss();
-      toast.error("Network error during upload. Please try again.");
-      console.error(err);
-    }
-  };
-
-  return (
+return (
     <div className="space-y-6 max-w-md mx-auto pb-10">
       <div className="bg-primary text-white p-6 rounded-2xl shadow-lg text-center relative overflow-hidden">
         <div className="relative z-10">
