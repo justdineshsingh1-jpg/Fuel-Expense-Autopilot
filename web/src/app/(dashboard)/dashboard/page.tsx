@@ -176,7 +176,7 @@ function FieldAgentDashboard({ user }: { user: any }) {
     }
   };
 
-            const handleSubmit = async (e: React.FormEvent) => {
+        const handleSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!photoPreview) {
         alert("A live photo is mandatory.");
@@ -184,7 +184,6 @@ function FieldAgentDashboard({ user }: { user: any }) {
       }
       toast.loading("Processing your submission...");
       try {
-        // 1. Upload to Supabase Storage (Serverless)
         const base64Data = photoPreview.split(',')[1];
         const byteCharacters = atob(base64Data);
         const byteNumbers = new Array(byteCharacters.length);
@@ -207,17 +206,14 @@ function FieldAgentDashboard({ user }: { user: any }) {
         });
         
         if (!uploadRes.ok) throw new Error("Upload failed");
-        
-        // Construct the public URL
         const imageUrl = "https://isjsbwjxvpmmgwvvksit.supabase.co/storage/v1/object/public/fuel-receipts/" + filename;
         
-        // 2. Save data to Vercel Serverless Database API
         if (modalType === 'expense') {
            const expRes = await fetch('/api/expenses', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                 agent_id: user.id || 'AG1001',
+                 agent_id: user?.id || 'AG1001',
                  type: expenseType,
                  amount: parseFloat(expenseAmount),
                  remarks: expenseRemarks,
@@ -227,9 +223,8 @@ function FieldAgentDashboard({ user }: { user: any }) {
            });
            if (!expRes.ok) throw new Error("Failed to save expense");
         } else {
-           // Trip Start/End
            const tripPayload: any = {
-              agent_id: user.id || 'AG1001',
+              agent_id: user?.id || 'AG1001',
               status: modalType === 'start' ? 'active' : 'completed',
               route_map_image_url: imageUrl
            };
@@ -240,7 +235,6 @@ function FieldAgentDashboard({ user }: { user: any }) {
               tripPayload.end_odometer = parseFloat(odometerReading);
               tripPayload.end_time = new Date().toISOString();
            }
-           
            const tripRes = await fetch('/api/trips', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -249,7 +243,7 @@ function FieldAgentDashboard({ user }: { user: any }) {
            if (!tripRes.ok) throw new Error("Failed to save trip");
         }
         
-        // 3. Update Local Storage for UI State
+        // Update Local UI State
         if (modalType === 'start' || modalType === 'end') {
           const today = new Date().toLocaleDateString();
           const time = new Date().toLocaleTimeString();
@@ -277,12 +271,12 @@ function FieldAgentDashboard({ user }: { user: any }) {
         setShowModal(false);
       } catch (err) {
         toast.dismiss();
-        toast.error("Error submitting data. Please try again.");
+        toast.error("Network error during upload. Please try again.");
         console.error(err);
       }
     };
-
-return (
+  
+  return (
     <div className="space-y-6 max-w-md mx-auto pb-10">
       <div className="bg-primary text-white p-6 rounded-2xl shadow-lg text-center relative overflow-hidden">
         <div className="relative z-10">
