@@ -18,10 +18,14 @@ export async function GET(request: Request) {
     let employeeName = 'Employee';
     const { data: userData } = await supabaseAdmin
       .from('users')
-      .select('full_name')
+      .select('full_name, vehicle_details')
       .eq('id', userId)
       .single();
-    if (userData) employeeName = userData.full_name;
+    let vehicleDetails = 'Own Bike';
+    if (userData) {
+      employeeName = userData.full_name;
+      if (userData.vehicle_details) vehicleDetails = userData.vehicle_details;
+    }
 
     // Fetch trips
     const { data: logs, error } = await supabaseAdmin
@@ -178,7 +182,7 @@ export async function GET(request: Request) {
           </table>
 
           <div class="footer-grid">
-            <div class="note-cell">Note: Own Bike</div>
+            <div class="note-cell">Note: ${vehicleDetails}</div>
             <div class="note-cell">Own Bike</div>
             <div class="note-cell" style="border-right: 1px solid #000; text-align: center; line-height: 1.4;">
               Month- Km-${totalKm}, Avg/Mileage-${derivedMileage} <br/>

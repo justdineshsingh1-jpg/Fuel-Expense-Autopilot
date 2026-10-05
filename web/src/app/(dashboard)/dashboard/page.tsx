@@ -36,6 +36,8 @@ function FieldAgentDashboard({ user }: { user: any }) {
   const [odometerReading, setOdometerReading] = useState('');
   const [particulars, setParticulars] = useState('Fuel');
   const [fuelLiters, setFuelLiters] = useState('');
+  const [vehicleDetails, setVehicleDetails] = useState('');
+  const [isEditingVehicle, setIsEditingVehicle] = useState(false);
   const [routeLocations, setRouteLocations] = useState('');
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
