@@ -114,7 +114,7 @@ export async function GET(request: Request) {
     }
 
     const monthName = new Date(startDate).toLocaleString('default', { month: 'short', year: 'numeric' }).toUpperCase();
-    const derivedMileage = totalLiters > 0 ? (totalKm / totalLiters).toFixed(2) : '37.61'; // fallback matched to sample
+    const derivedMileage = totalLiters > 0 ? (totalKm / totalLiters).toFixed(2) : 'N/A';
 
     // HTML Template matching physical format precisely
     const htmlContent = `
