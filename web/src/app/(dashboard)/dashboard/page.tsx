@@ -144,9 +144,14 @@ function FieldAgentDashboard({ user }: { user: any }) {
         const { Geolocation } = await import('@capacitor/geolocation');
         let position: any = null;
         try {
-          position = await Geolocation.getCurrentPosition({ enableHighAccuracy: true });
+          position = await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 5000 });
         } catch(e) {
-          console.error("GPS Error", e);
+          try {
+            console.warn("High accuracy failed, trying low accuracy...");
+            position = await Geolocation.getCurrentPosition({ enableHighAccuracy: false, timeout: 5000 });
+          } catch(e2) {
+            console.error("All GPS Failed", e2);
+          }
         }
 
         // Reverse Geocode
@@ -154,10 +159,10 @@ function FieldAgentDashboard({ user }: { user: any }) {
         let cityState = "Unknown Location";
         if (position) {
           try {
-            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.coords.latitude}&lon=${position.coords.longitude}`);
+            const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${position.coords.latitude}&longitude=${position.coords.longitude}&localityLanguage=en`);
             const data = await res.json();
-            address = data.display_name || address;
-            cityState = data.address?.state_district || data.address?.city || data.address?.state || cityState;
+            address = data.locality + ", " + data.principalSubdivision + " - " + data.postcode || address;
+            cityState = data.city || data.locality || cityState;
           } catch(e) {
             console.error("Geocode Error", e);
           }
