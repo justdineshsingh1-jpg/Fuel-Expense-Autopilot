@@ -236,7 +236,7 @@ function FieldAgentDashboard({ user }: { user: any }) {
         const watermarkedUrl = canvas.toDataURL('image/jpeg', 0.85);
         setPhotoPreview(watermarkedUrl);
       } catch (error) {
-        setPhotoPreview(URL.createObjectURL(file));
+        setPhotoPreview(URL.createObjectURL(file)); console.error(error);
       } finally {
         setIsProcessingPhoto(false);
       }
@@ -288,7 +288,7 @@ function FieldAgentDashboard({ user }: { user: any }) {
                status: 'pending'
             })
          });
-         // if (!expRes.ok) throw new Error("Failed to save expense");
+         if (!expRes.ok) { const errData = await expRes.json(); throw new Error(errData.error || "Failed to save expense"); }
       } else {
          const tripPayload: any = {
             user_id: user?.id || '98765432-1234-5678-1234-567812345678', // fallback UUID if needed
@@ -330,7 +330,7 @@ function FieldAgentDashboard({ user }: { user: any }) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(tripPayload)
          });
-         // if (!tripRes.ok) throw new Error("Failed to save trip");
+         if (!tripRes.ok) { const errData = await tripRes.json(); throw new Error(errData.error || "Failed to save trip to database"); }
       }
       
       if (modalType === 'start' || modalType === 'end') {

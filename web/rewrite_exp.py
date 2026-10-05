@@ -1,4 +1,7 @@
-import { NextResponse } from 'next/server';
+﻿import os
+
+path = r"c:\Users\MIS\OneDrive\Fuel Expense Autopilot\web\src\app\api\expenses\route.ts"
+content = """import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 export async function GET(request: Request) {
@@ -41,3 +44,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
+"""
+
+with open(path, "w", encoding="utf8") as f:
+    f.write(content)
+print("Rewrote Expenses API to use Storage")
