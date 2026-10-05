@@ -23,6 +23,54 @@ import toast from 'react-hot-toast';
 
 // Mock data
 
+
+const RouteLoader = ({ userId, logDate, status }: { userId: string, logDate: string, status: string }) => {
+  const [waypoints, setWaypoints] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (status === 'active') {
+      setLoading(false);
+      return;
+    }
+    const fetchMap = async () => {
+      try {
+        const url = `https://isjsbwjxvpmmgwvvksit.supabase.co/storage/v1/object/public/fuel-receipts/map_history/${userId}_${logDate}.json`;
+        const res = await fetch(url);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.waypoints) {
+            setWaypoints(data.waypoints.map((w: any) => `${w.timestamp}: ${w.lat.toFixed(4)}, ${w.lng.toFixed(4)}`));
+          }
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchMap();
+  }, [userId, logDate, status]);
+
+  if (status === 'active') {
+    return <div className="text-sm text-gray-500 italic p-4 text-center">Shift is currently active. Route will be generated upon check-out.</div>;
+  }
+  
+  if (loading) return <div className="text-sm text-gray-400 p-4">Loading route data...</div>;
+  if (waypoints.length === 0) return <div className="text-sm text-gray-400 p-4">No route data saved for this trip.</div>;
+
+  return (
+    <div className="relative border-l-2 border-primary ml-3 space-y-4 py-2">
+      {waypoints.map((wp: string, idx: number) => (
+        <div key={idx} className="relative pl-4">
+          <span className="absolute -left-[9px] top-1 h-4 w-4 rounded-full border-2 border-primary bg-white"></span>
+          <p className="text-sm font-medium text-gray-800">{wp}</p>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 export default function ApprovalsPage() {
   const [trips, setTrips] = useState<any[]>([]);
   
@@ -33,6 +81,8 @@ export default function ApprovalsPage() {
           id: d.id,
           date: d.created_at,
           employeeName: 'Agent ' + d.user_id.substring(0,4),
+          userId: d.user_id,
+          logDate: d.log_date,
           claimedKm: (d.end_reading && d.start_reading) ? (d.end_reading - d.start_reading) : 0,
           osrmKm: d.osrm_calculated_km || 0,
           variancePercentage: d.variance_percent || 0,
