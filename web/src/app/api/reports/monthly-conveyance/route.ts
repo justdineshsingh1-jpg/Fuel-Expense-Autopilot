@@ -48,6 +48,7 @@ export async function GET(request: Request) {
     const defaultMode = 'Cash/ Bike';
     const defaultPurpose = 'Official';
 
+    
     if (logs) {
       logs.forEach(log => {
         const claimedKm = (log.end_reading || 0) - (log.start_reading || log.end_reading || 0);
@@ -63,7 +64,6 @@ export async function GET(request: Request) {
         const dateParts = log.log_date ? log.log_date.split('-') : [];
         const formattedDate = dateParts.length === 3 ? `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}` : log.log_date;
 
-        // 1. Render Fuel Row if exists
         if (fuelCost > 0) {
           grandTotalAmount += fuelCost;
           rowsHtml += `
@@ -78,7 +78,6 @@ export async function GET(request: Request) {
           `;
         }
 
-        // 2. Render Misc Row if exists
         if (miscCost > 0) {
           grandTotalAmount += miscCost;
           rowsHtml += `
@@ -95,7 +94,6 @@ export async function GET(request: Request) {
       });
     }
 
-    // Add Fixed Monthly Mobile Recharge Allowance
     const FIXED_MOBILE_RECHARGE = 300;
     grandTotalAmount += FIXED_MOBILE_RECHARGE;
     
@@ -110,17 +108,15 @@ export async function GET(request: Request) {
       </tr>
     `;
 
-    // Add empty rows to match paper layout height
-    const minRows = 25;
+    // Calculate how many empty rows we need to reach exactly 16 data rows (so the Note row is positioned like the image)
     const currentRows = (rowsHtml.match(/<tr/g) || []).length;
-    for(let i = currentRows; i < minRows; i++) {
+    for(let i = currentRows; i < 16; i++) {
         rowsHtml += `<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>`;
     }
 
     const monthName = new Date(startDate).toLocaleString('default', { month: 'short', year: 'numeric' }).toUpperCase();
-    const derivedMileage = totalLiters > 0 ? (totalKm / totalLiters).toFixed(2) : 'N/A';
+    const derivedMileage = totalLiters > 0 ? (totalKm / totalLiters).toFixed(2) : 'N/A'; 
 
-    // HTML Template matching physical format precisely
     const htmlContent = `
       <!DOCTYPE html>
       <html>
@@ -131,70 +127,74 @@ export async function GET(request: Request) {
           body { font-family: Arial, sans-serif; font-size: 11px; margin: 0; padding: 0; }
           .container { width: 100%; max-width: 800px; margin: 0 auto; box-sizing: border-box; }
           
-          .header-box { text-align: center; border: 1px solid #000; border-bottom: none;}
-          .company-name { font-size: 16px; font-weight: bold; border-bottom: 1px solid #000; padding: 4px; }
-          .address { font-size: 11px; font-weight: bold; border-bottom: 1px solid #000; padding: 2px; }
-          .sheet-title { font-size: 12px; font-weight: bold; padding: 3px; border-bottom: 1px solid #000;}
-          
-          .metadata { display: flex; justify-content: space-between; padding: 5px 10px; font-weight: bold; border: 1px solid #000; border-bottom: none; border-top: none;}
-          
-          table { width: 100%; border-collapse: collapse; }
+          table { width: 100%; border-collapse: collapse; border: 1px solid #000; }
           th, td { border: 1px solid #000; padding: 4px; }
           th { font-weight: bold; text-align: center; }
           .text-center { text-align: center; }
-          
-          .footer-notes { border-top: 1px solid #000; }
-          .footer-grid { display: grid; grid-template-columns: 2fr 1fr 2fr; }
-          .note-cell { padding: 5px; font-weight: bold; border-right: 1px solid #000; border-bottom: 1px solid #000; border-left: 1px solid #000; }
-          
-          .totals-row { display: grid; grid-template-columns: 4.8fr 1.2fr 1fr; }
-          .total-label { text-align: right; padding: 5px 10px; font-weight: bold; border-right: 1px solid #000; border-bottom: 1px solid #000; border-left: 1px solid #000; }
-          .total-amount { text-align: center; font-weight: bold; padding: 5px; border-right: 1px solid #000; border-bottom: 1px solid #000;}
+          .text-right { text-align: right; }
+          .font-bold { font-weight: bold; }
+          .title-lg { font-size: 16px; font-weight: bold; padding: 4px; text-align: center;}
+          .title-md { font-size: 12px; font-weight: bold; padding: 3px; text-align: center;}
+          .title-sm { font-size: 11px; font-weight: bold; padding: 2px; text-align: center;}
         </style>
       </head>
       <body>
         <div class="container">
-          <div class="header-box">
-            <div class="company-name">INDUSTRIAL SYSTEMS LLP</div>
-            <div class="address">KAY M PLAZA,3RD FLOOR, G.S.ROAD, GANESHGURI, NEAR KAR BHAWAN, GHY -06</div>
-            <div class="sheet-title">LOCAL CONVEYANCE EXPENSES SHEET</div>
-          </div>
-          
-          <div class="metadata">
-            <div>Name ...${employeeName.toUpperCase()}............................................................</div>
-            <div>For the month of ......${monthName}...................</div>
-          </div>
-
           <table>
-            <thead>
-              <tr>
-                <th style="width: 12%">Date</th>
-                <th style="width: 28%">Particulars</th>
-                <th style="width: 12%">Mode</th>
-                <th style="width: 20%">Purpose</th>
-                <th style="width: 12%">Amount</th>
-                <th style="width: 16%">Remarks</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rowsHtml}
-            </tbody>
+            <!-- HEADER BLOCK -->
+            <tr>
+              <td colspan="6" class="title-lg">INDUSTRIAL SYSTEMS LLP</td>
+            </tr>
+            <tr>
+              <td colspan="6" class="title-sm">KAY M PLAZA,3RD FLOOR, G.S.ROAD, GANESHGURI, NEAR KAR BHAWAN, GHY -06</td>
+            </tr>
+            <tr>
+              <td colspan="6" class="title-md">LOCAL CONVEYANCE EXPENSES SHEET</td>
+            </tr>
+            
+            <!-- METADATA BLOCK -->
+            <tr>
+              <td colspan="3" class="font-bold">Name ...${employeeName.toUpperCase()}............................................................</td>
+              <td colspan="3" class="font-bold">For the month of ......${monthName}...................</td>
+            </tr>
+
+            <!-- COLUMNS -->
+            <tr>
+              <th style="width: 12%">Date</th>
+              <th style="width: 28%">Particulars</th>
+              <th style="width: 12%">Mode</th>
+              <th style="width: 20%">Purpose</th>
+              <th style="width: 12%">Amount</th>
+              <th style="width: 16%">Remarks</th>
+            </tr>
+
+            <!-- DYNAMIC DATA & EMPTY ROWS -->
+            ${rowsHtml}
+
+            <!-- FOOTER NOTE ROW -->
+            <tr>
+              <td class="font-bold">Note:</td>
+              <td class="font-bold">${vehicleDetails}</td>
+              <td class="font-bold">Own Bike</td>
+              <td></td>
+              <td colspan="2" class="text-center font-bold">Month- Km-${totalKm}, Avg/Mileage-${derivedMileage}</td>
+            </tr>
+
+            <!-- EXTRA EMPTY ROWS BELOW NOTE (Matches Image exactly) -->
+            <tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>
+            <tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>
+            <tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>
+            <tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>
+            <tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>
+
+            <!-- TOTAL ROW -->
+            <tr>
+              <td colspan="3"></td>
+              <td class="text-center font-bold">Total</td>
+              <td class="text-center font-bold">${grandTotalAmount}</td>
+              <td></td>
+            </tr>
           </table>
-
-          <div class="footer-grid">
-            <div class="note-cell">Note: ${vehicleDetails}</div>
-            <div class="note-cell">Own Bike</div>
-            <div class="note-cell" style="border-right: 1px solid #000; text-align: center; line-height: 1.4;">
-              Month- Km-${totalKm}, Avg/Mileage-${derivedMileage} <br/>
-            </div>
-          </div>
-
-          <div class="totals-row">
-            <div class="total-label">Total</div>
-            <div class="total-amount">${grandTotalAmount}</div>
-            <div style="border-bottom: 1px solid #000; border-right: 1px solid #000;"></div>
-          </div>
-
         </div>
         
         <script>
