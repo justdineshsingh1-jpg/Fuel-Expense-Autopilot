@@ -5,8 +5,7 @@ const supabase = createClient(
 );
 
 async function check() {
-  const { data, error } = await supabase.from('trip_logs').select('*').order('created_at', { ascending: false }).limit(5);
-  console.log("DB Trips:", JSON.stringify(data, null, 2));
-  console.log("DB Error:", error);
+  const { data, error } = await supabase.storage.from('fuel-receipts').list('odometer', { limit: 10, sortBy: { column: 'created_at', order: 'desc' } });
+  console.log("Storage:", data);
 }
 check();

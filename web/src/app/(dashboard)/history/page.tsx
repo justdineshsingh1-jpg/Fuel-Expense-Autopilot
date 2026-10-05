@@ -15,7 +15,7 @@ export default function HistoryPage() {
 
   React.useEffect(() => {
     if (!user) return;
-    fetch('/api/trips')
+    fetch('https://fuel-expense-autopilot.vercel.app/api/trips')
       .then(r => r.json())
       .then(data => {
         if (Array.isArray(data)) {

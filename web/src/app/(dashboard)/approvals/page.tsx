@@ -27,7 +27,7 @@ export default function ApprovalsPage() {
   const [trips, setTrips] = useState<any[]>([]);
   
   useEffect(() => {
-    fetch('/api/trips').then(r => r.json()).then(data => {
+    fetch('https://fuel-expense-autopilot.vercel.app/api/trips').then(r => r.json()).then(data => {
       if (Array.isArray(data)) setTrips(data);
     }).catch(e => console.error(e));
   }, []);

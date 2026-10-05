@@ -119,7 +119,7 @@ function FieldAgentDashboard({ user }: { user: any }) {
           }
 
           // 3. Hit Database API
-          const endpoint = task.type === 'expense' ? '/api/expenses' : '/api/trips';
+          const endpoint = task.type === 'expense' ? 'https://fuel-expense-autopilot.vercel.app/api/expenses' : 'https://fuel-expense-autopilot.vercel.app/api/trips';
           const apiRes = await fetch(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -471,7 +471,7 @@ function FieldAgentDashboard({ user }: { user: any }) {
              });
           }
 
-          const endpoint = modalType === 'expense' ? '/api/expenses' : '/api/trips';
+          const endpoint = modalType === 'expense' ? 'https://fuel-expense-autopilot.vercel.app/api/expenses' : 'https://fuel-expense-autopilot.vercel.app/api/trips';
           const apiRes = await fetch(endpoint, {
              method: 'POST',
              headers: { 'Content-Type': 'application/json' },
