@@ -244,13 +244,24 @@ function FieldAgentDashboard({ user }: { user: any }) {
         let address = "Location unavailable";
         let cityState = "Unknown Location";
         if (position) {
-          try {
-            const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${position.coords.latitude}&longitude=${position.coords.longitude}&localityLanguage=en`);
-            const data = await res.json();
-            address = data.locality + ", " + data.principalSubdivision + " - " + data.postcode || address;
-            cityState = data.city || data.locality || cityState;
-          } catch(e) {
-            console.error("Geocode Error", e);
+          if (!navigator.onLine) {
+             address = "Coordinates acquired. Sync pending.";
+             cityState = "Offline Mode Active";
+          } else {
+            try {
+              const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${position.coords.latitude}&longitude=${position.coords.longitude}&localityLanguage=en`);
+              const data = await res.json();
+              
+              const parts = [data.locality || data.city, data.principalSubdivision, data.postcode].filter(Boolean);
+              if (parts.length > 0) {
+                 address = parts.join(", ");
+              }
+              cityState = data.city || data.locality || data.principalSubdivision || "Location Identified";
+            } catch(e) {
+              console.error("Geocode Error", e);
+              address = "Network weak. Coordinates saved.";
+              cityState = "Offline Geocoding";
+            }
           }
         }
 
