@@ -249,14 +249,16 @@ function FieldAgentDashboard({ user }: { user: any }) {
              cityState = "Offline Mode Active";
           } else {
             try {
-              const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${position.coords.latitude}&longitude=${position.coords.longitude}&localityLanguage=en`);
+              const res = await fetch(`/api/geocode?lat=${position.coords.latitude}&lng=${position.coords.longitude}`);
               const data = await res.json();
-              
-              const parts = [data.locality || data.city, data.principalSubdivision, data.postcode].filter(Boolean);
-              if (parts.length > 0) {
-                 address = parts.join(", ");
+              if (data && data.display_name) {
+                // Break display_name into a shorter street address and City/State heading
+                const parts = data.display_name.split(', ');
+                cityState = data.address?.state_district || data.address?.city || data.address?.town || data.address?.state || "Location Identified";
+                address = parts.slice(0, 3).join(', '); // Get first few details like Street, Suburb, etc.
+              } else {
+                throw new Error("No address found");
               }
-              cityState = data.city || data.locality || data.principalSubdivision || "Location Identified";
             } catch(e) {
               console.error("Geocode Error", e);
               address = "Network weak. Coordinates saved.";
