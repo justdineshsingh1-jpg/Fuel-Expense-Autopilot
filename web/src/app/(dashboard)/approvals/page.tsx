@@ -86,13 +86,13 @@ export default function ApprovalsPage() {
           claimedKm: (d.end_reading && d.start_reading) ? (d.end_reading - d.start_reading) : 0,
           osrmKm: d.osrm_calculated_km || 0,
           variancePercentage: d.variance_percent || 0,
-          fuelAmount: 0,
+          fuelAmount: d.fuel_amount || 0,
           status: d.approval_status || 'pending',
           startOdometerPhotoUrl: d.start_odometer_image_url,
           endOdometerPhotoUrl: d.end_odometer_image_url,
-          fuelBillPhotoUrl: null,
+          fuelBillPhotoUrl: d.fuel_bill_url || null,
           waypoints: [],
-          fraudFlags: []
+          fraudFlags: d.fraud_flags || []
         }));
         setTrips(mapped);
       }

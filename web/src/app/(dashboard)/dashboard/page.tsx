@@ -390,6 +390,9 @@ function FieldAgentDashboard({ user }: { user: any }) {
             
             const saved = localStorage.getItem('dailyTripStatus');
             const data = saved ? JSON.parse(saved) : {};
+            payload.start_reading = data.startOdo ? parseFloat(data.startOdo) : parseFloat(odometerReading); // Need start reading for math
+            payload.waypoints = data.waypoints || []; // Pass waypoints directly to API for OSRM!
+            
             const isoDate = new Date().toISOString().split('T')[0];
             mapData = {
               agent_name: user?.name || 'Agent',
