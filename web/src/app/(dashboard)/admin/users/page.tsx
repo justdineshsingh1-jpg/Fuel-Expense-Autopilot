@@ -162,7 +162,11 @@ export default function UsersPage() {
                     </Badge>
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <button className="text-blue-600 hover:text-blue-800 p-2"><Edit className="h-4 w-4" /></button>
+                    
+                      <button onClick={() => handleResetPassword(u.id, u.full_name)} className="text-orange-500 hover:text-orange-700 p-2 inline-flex items-center gap-1 font-bold text-xs bg-orange-50 rounded-md border border-orange-200 mr-2" title="Reset Password to password123">
+                        <Key className="h-4 w-4" /> Reset Pwd
+                      </button>
+                      <button onClick={() => alert('Edit agent coming soon!')} className="text-blue-600 hover:text-blue-800 p-2"><Edit className="h-4 w-4" /></button>
                     <button onClick={() => handleDeleteUser(u.id)} className="text-red-500 hover:text-red-700 p-2"><Trash className="h-4 w-4" /></button>
                   </td>
                 </tr>
