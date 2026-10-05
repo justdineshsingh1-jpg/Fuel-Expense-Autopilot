@@ -31,9 +31,8 @@ export const loginWithBackend = async (email: string, password: string):Promise<
       department: data.user.department || 'Operations',
     };
   } catch (err) {
-    console.error(err);
-    console.log("Falling back to mock login");
-    return mockLogin(email);
+    console.error("Login Error:", err);
+    throw err;
   }
 }
 
