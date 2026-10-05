@@ -86,6 +86,22 @@ export async function GET(request: Request) {
       });
     }
 
+
+    // Add Fixed Monthly Mobile Recharge Allowance
+    const FIXED_MOBILE_RECHARGE = 300;
+    grandTotalAmount += FIXED_MOBILE_RECHARGE;
+    
+    rowsHtml += `
+      <tr>
+        <td class="text-center">End of Month</td>
+        <td class="text-center">-</td>
+        <td class="text-center">-</td>
+        <td class="text-center">-</td>
+        <td>Fixed Monthly Mobile Recharge Allowance</td>
+        <td class="text-center">${FIXED_MOBILE_RECHARGE}/-</td>
+      </tr>
+    `;
+
     // Add empty rows to match paper layout height
     const minRows = 25;
     const currentRows = (rowsHtml.match(/<tr/g) || []).length;
