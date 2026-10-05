@@ -12,7 +12,14 @@
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // your existing config
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'isjsbwjxvpmmgwvvksit.supabase.co',
+      }
+    ],
+  },
 };
 
 module.exports = withPWA(nextConfig);
