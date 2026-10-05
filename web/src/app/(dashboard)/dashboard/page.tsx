@@ -161,19 +161,81 @@ function FieldAgentDashboard({ user }: { user: any }) {
     };
   }, []);
 
-  // BACKGROUND GPS TRACKER
+  // ADAPTIVE BACKGROUND GPS ENGINE (GUWAHATI SPEC)
   useEffect(() => {
-    let intervalId: any;
-    if (tripActive) {
-      intervalId = setInterval(async () => {
-        try {
-          const { Geolocation } = await import('@capacitor/geolocation');
-          const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy: true });
+    if (!tripActive) return;
+
+    let watchId: string;
+    let lastMode = 'transit'; 
+    let stationaryStartTime = 0;
+    let lastSavedPos: any = null;
+    let modeDebounceStart = 0;
+
+    const initAdaptiveTracker = async () => {
+      try {
+        const { Geolocation } = await import('@capacitor/geolocation');
+        
+        watchId = await Geolocation.watchPosition({ enableHighAccuracy: true }, (pos, err) => {
+          if (err || !pos) return;
+
+          // 1. Accuracy Filter
+          if (pos.coords.accuracy > 20) return; // Discard bad indoor bounces
+
+          const speedKmh = (pos.coords.speed || 0) * 3.6; // Convert m/s to km/h
+          const now = Date.now();
+
+          // 2. Stationary Freeze Logic
+          if (speedKmh < 2) {
+            if (stationaryStartTime === 0) stationaryStartTime = now;
+            // If stationary for > 3 minutes (180000ms), freeze listener
+            if (now - stationaryStartTime > 180000) return;
+          } else {
+            stationaryStartTime = 0; // Reset
+          }
+
+          // 3. Hysteresis Buffer (Mode Determination - 45s Debounce)
+          let targetMode = speedKmh > 20 ? 'transit' : 'survey';
+          
+          if (targetMode !== lastMode) {
+            if (modeDebounceStart === 0) modeDebounceStart = now;
+            // Only switch modes if 45 seconds have passed continuously
+            if (now - modeDebounceStart >= 45000) {
+              lastMode = targetMode;
+              modeDebounceStart = 0;
+            }
+          } else {
+            modeDebounceStart = 0; 
+          }
+          
+          let currentMode = lastMode;
+
+          // 4. Distance Filter Simulation (since Capacitor core lacks native dynamic distance filters)
+          if (lastSavedPos) {
+            const R = 6371e3;
+            const p1 = lastSavedPos.lat * Math.PI/180;
+            const p2 = pos.coords.latitude * Math.PI/180;
+            const dp = (pos.coords.latitude-lastSavedPos.lat) * Math.PI/180;
+            const dl = (pos.coords.longitude-lastSavedPos.lng) * Math.PI/180;
+            const a = Math.sin(dp/2) * Math.sin(dp/2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl/2) * Math.sin(dl/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            const distanceMeters = R * c;
+
+            // Filter logic
+            if (currentMode === 'transit' && distanceMeters < 100) return; // Log every 100m
+            if (currentMode === 'survey' && distanceMeters < 10) return;  // Log every 10m
+          }
+
+          // Valid point passed all filters!
           const wp = {
             lat: pos.coords.latitude,
             lng: pos.coords.longitude,
-            timestamp: new Date().toLocaleTimeString()
+            timestamp: new Date().toISOString(),
+            speed: speedKmh,
+            mode: currentMode
           };
+
+          lastSavedPos = wp;
+
           const saved = localStorage.getItem('dailyTripStatus');
           if (saved) {
             const data = JSON.parse(saved);
@@ -181,12 +243,21 @@ function FieldAgentDashboard({ user }: { user: any }) {
             data.waypoints.push(wp);
             localStorage.setItem('dailyTripStatus', JSON.stringify(data));
           }
-        } catch(e) {
-          console.error("Tracker failed to get position", e);
-        }
-      }, 5 * 60 * 1000);
-    }
-    return () => { if (intervalId) clearInterval(intervalId); };
+        });
+      } catch(e) {
+        console.error("GPS Init Error", e);
+      }
+    };
+
+    initAdaptiveTracker();
+
+    return () => {
+      if (watchId) {
+        import('@capacitor/geolocation').then(({ Geolocation }) => {
+          Geolocation.clearWatch({ id: watchId });
+        });
+      }
+    };
   }, [tripActive]);
 
   // Aggressive GPS Guard
