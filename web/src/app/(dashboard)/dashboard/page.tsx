@@ -733,6 +733,19 @@ export default function Dashboard() {
     return <FieldAgentDashboard user={user} />;
   }
 
+  const [adminTrips, setAdminTrips] = useState<any[]>([]);
+  useEffect(() => {
+    if (user?.role !== 'field_agent') {
+      fetch('https://fuel-expense-autopilot.vercel.app/api/trips')
+        .then(r => r.json())
+        .then(data => { if (Array.isArray(data)) setAdminTrips(data); })
+        .catch(console.error);
+    }
+  }, [user]);
+
+  const activeCount = adminTrips.filter(t => t.approval_status === 'active').length;
+  const pendingCount = adminTrips.filter(t => t.approval_status === 'pending').length;
+
   const mockTrendData = [{ name: 'Today', amount: 0 }];
   
   const mockDeptData = [{ name: 'No Data', value: 1 }];

@@ -28,7 +28,24 @@ export default function ApprovalsPage() {
   
   useEffect(() => {
     fetch('https://fuel-expense-autopilot.vercel.app/api/trips').then(r => r.json()).then(data => {
-      if (Array.isArray(data)) setTrips(data);
+      if (Array.isArray(data)) {
+        const mapped = data.map(d => ({
+          id: d.id,
+          date: d.created_at,
+          employeeName: 'Agent ' + d.user_id.substring(0,4),
+          claimedKm: (d.end_reading && d.start_reading) ? (d.end_reading - d.start_reading) : 0,
+          osrmKm: d.osrm_calculated_km || 0,
+          variancePercentage: d.variance_percent || 0,
+          fuelAmount: 0,
+          status: d.approval_status || 'pending',
+          startOdometerPhotoUrl: d.start_odometer_image_url,
+          endOdometerPhotoUrl: d.end_odometer_image_url,
+          fuelBillPhotoUrl: null,
+          waypoints: [],
+          fraudFlags: []
+        }));
+        setTrips(mapped);
+      }
     }).catch(e => console.error(e));
   }, []);
 
