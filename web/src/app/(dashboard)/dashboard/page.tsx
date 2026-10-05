@@ -99,11 +99,12 @@ function FieldAgentDashboard({ user }: { user: any }) {
             method: 'POST',
             headers: { 
               'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzanNid2p4dnBtbWd3dnZrc2l0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MDY1ODUwOSwiZXhwIjoyMTA2MjM0NTA5fQ.ibmxLHoSd6ySCPvVZ8mjSUGe0t8M0eF_u3mJRV8Wbe8',
-              'Content-Type': 'image/jpeg'
+              'Content-Type': 'image/jpeg',
+              'x-upsert': 'true'
             },
             body: blob
           });
-          if (!uploadRes.ok) throw new Error("Sync photo upload failed");
+          if (!uploadRes.ok && uploadRes.status !== 400 && uploadRes.status !== 409) throw new Error("Sync photo upload failed");
 
           // 2. Upload Map Data if End Shift
           if (task.type === 'end' && task.mapData && task.mapFilename) {
@@ -457,7 +458,7 @@ function FieldAgentDashboard({ user }: { user: any }) {
             },
             body: blob
           });
-          if (!uploadRes.ok) throw new Error("Upload failed");
+          if (!uploadRes.ok && uploadRes.status !== 400 && uploadRes.status !== 409) throw new Error("Upload failed");
 
           if (mapData && mapFilename) {
              await fetch('https://isjsbwjxvpmmgwvvksit.supabase.co/storage/v1/object/fuel-receipts/' + mapFilename, {
