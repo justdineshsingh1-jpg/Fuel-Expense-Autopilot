@@ -8,7 +8,7 @@ export const loginWithBackend = async (email: string, password: string):Promise<
     formData.append('username', email);
     formData.append('password', password);
 
-    const res = await fetch(`${API_URL}/auth/login`, {
+    const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
