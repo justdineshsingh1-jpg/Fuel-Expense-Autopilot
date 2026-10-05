@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { ROLE_LABELS } from '@/lib/constants';
-import { Plus, UserCog, Edit, Trash, X, AlertTriangle } from 'lucide-react';
+import { Plus, UserCog, Edit, Trash, X, AlertTriangle, Key } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '@/lib/store';
 import { useRouter } from 'next/navigation';
@@ -29,6 +29,26 @@ export default function UsersPage() {
   useEffect(() => {
     fetchUsers();
   }, []);
+
+  
+  const handleResetPassword = async (userId: string, userName: string) => {
+    if (!confirm(`Are you sure you want to reset the password for ${userName}? It will be reset to: password123`)) return;
+    
+    const promise = fetch('/api/users/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, new_password: 'password123' })
+    }).then(async (res) => {
+      if (!res.ok) throw new Error('Failed to reset');
+      return res.json();
+    });
+
+    toast.promise(promise, {
+      loading: 'Resetting password...',
+      success: 'Password reset to: password123',
+      error: 'Failed to reset password'
+    });
+  };
 
   const fetchUsers = async () => {
     try {
