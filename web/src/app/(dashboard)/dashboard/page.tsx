@@ -343,87 +343,50 @@ function FieldAgentDashboard({ user }: { user: any }) {
     toast.loading("Processing your submission...");
     try {
       const base64Data = photoPreview.split(',')[1];
-      const byteCharacters = atob(base64Data);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], {type: 'image/jpeg'});
-      
       const folder = modalType === 'expense' ? 'bills' : 'odometer';
       const filename = folder + '/' + Date.now() + '.jpg';
-      
-      const uploadRes = await fetch('https://isjsbwjxvpmmgwvvksit.supabase.co/storage/v1/object/fuel-receipts/' + filename, {
-        method: 'POST',
-        headers: { 
-          'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzanNid2p4dnBtbWd3dnZrc2l0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MDY1ODUwOSwiZXhwIjoyMTA2MjM0NTA5fQ.ibmxLHoSd6ySCPvVZ8mjSUGe0t8M0eF_u3mJRV8Wbe8',
-          'Content-Type': 'image/jpeg'
-        },
-        body: blob
-      });
-      
-      if (!uploadRes.ok) throw new Error("Upload failed");
       const imageUrl = "https://isjsbwjxvpmmgwvvksit.supabase.co/storage/v1/object/public/fuel-receipts/" + filename;
       
+      let payload: any = {};
+      let mapData: any = null;
+      let mapFilename: string | undefined = undefined;
+
       if (modalType === 'expense') {
-         const expRes = await fetch('/api/expenses', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-               agent_id: user?.id || 'AG1001',
-               type: expenseType,
-               amount: parseFloat(expenseAmount),
-               remarks: expenseRemarks,
-               receipt_url: imageUrl,
-               status: 'pending'
-            })
-         });
-         if (!expRes.ok) { const errData = await expRes.json(); throw new Error(errData.error || "Failed to save expense"); }
+         payload = {
+           agent_id: user?.id || 'AG1001',
+           type: expenseType,
+           amount: parseFloat(expenseAmount),
+           remarks: expenseRemarks,
+           receipt_url: imageUrl,
+           status: 'pending'
+         };
       } else {
-         const tripPayload: any = {
-            user_id: user?.id || '98765432-1234-5678-1234-567812345678', // fallback UUID if needed
+         payload = {
+            user_id: user?.id || '98765432-1234-5678-1234-567812345678',
             approval_status: modalType === 'start' ? 'active' : 'completed',
          };
          if (modalType === 'start') {
-            tripPayload.start_reading = parseFloat(odometerReading);
-            tripPayload.start_capture_timestamp = new Date().toISOString();
-            tripPayload.start_odometer_image_url = imageUrl;
+            payload.start_reading = parseFloat(odometerReading);
+            payload.start_capture_timestamp = new Date().toISOString();
+            payload.start_odometer_image_url = imageUrl;
          } else {
-            tripPayload.end_reading = parseFloat(odometerReading);
-            tripPayload.end_capture_timestamp = new Date().toISOString();
-            tripPayload.end_odometer_image_url = imageUrl;
+            payload.end_reading = parseFloat(odometerReading);
+            payload.end_capture_timestamp = new Date().toISOString();
+            payload.end_odometer_image_url = imageUrl;
             
-            // MAP HISTORY UPLOAD
             const saved = localStorage.getItem('dailyTripStatus');
             const data = saved ? JSON.parse(saved) : {};
             const isoDate = new Date().toISOString().split('T')[0];
-            const mapData = {
+            mapData = {
               agent_name: user?.name || 'Agent',
               date: isoDate,
               locations: routeLocations,
               waypoints: data.waypoints || []
             };
-            const mapFilename = `map_history/${user?.id || 'AG1001'}_${isoDate}.json`;
-            await fetch('https://isjsbwjxvpmmgwvvksit.supabase.co/storage/v1/object/fuel-receipts/' + mapFilename, {
-              method: 'POST',
-              headers: { 
-                'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzanNid2p4dnBtbWd3dnZrc2l0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MDY1ODUwOSwiZXhwIjoyMTA2MjM0NTA5fQ.ibmxLHoSd6ySCPvVZ8mjSUGe0t8M0eF_u3mJRV8Wbe8',
-                'Content-Type': 'application/json',
-                'x-upsert': 'true'
-              },
-              body: JSON.stringify(mapData)
-            });
+            mapFilename = `map_history/${user?.id || 'AG1001'}_${isoDate}.json`;
          }
-         
-         const tripRes = await fetch('/api/trips', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(tripPayload)
-         });
-         if (!tripRes.ok) { const errData = await tripRes.json(); throw new Error(errData.error || "Failed to save trip to database"); }
       }
-      
+
       if (modalType === 'start' || modalType === 'end') {
         const today = new Date().toLocaleDateString();
         const time = new Date().toLocaleTimeString();
@@ -446,13 +409,76 @@ function FieldAgentDashboard({ user }: { user: any }) {
         localStorage.setItem('dailyTripStatus', JSON.stringify(newActivity));
       }
 
-      toast.dismiss();
-      toast.success(modalType === 'start' ? "Shift Started!" : (modalType === 'end' ? "Shift Ended!" : "Expense Submitted!"));
+      const task = {
+         id: Date.now().toString(),
+         type: modalType as any,
+         payload,
+         photoBase64: base64Data,
+         filename,
+         mapData,
+         mapFilename,
+         timestamp: Date.now()
+      };
+
+      if (!navigator.onLine) {
+         await saveOfflineTask(task);
+         setQueueCount(c => c + 1);
+         toast.dismiss();
+         toast.success("Saved Offline! Will sync when connected.");
+         setShowModal(false);
+         return;
+      }
+
+      try {
+          const byteCharacters = atob(base64Data);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) byteNumbers[i] = byteCharacters.charCodeAt(i);
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], {type: 'image/jpeg'});
+          
+          const uploadRes = await fetch('https://isjsbwjxvpmmgwvvksit.supabase.co/storage/v1/object/fuel-receipts/' + filename, {
+            method: 'POST',
+            headers: { 
+              'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzanNid2p4dnBtbWd3dnZrc2l0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MDY1ODUwOSwiZXhwIjoyMTA2MjM0NTA5fQ.ibmxLHoSd6ySCPvVZ8mjSUGe0t8M0eF_u3mJRV8Wbe8',
+              'Content-Type': 'image/jpeg'
+            },
+            body: blob
+          });
+          if (!uploadRes.ok) throw new Error("Upload failed");
+
+          if (mapData && mapFilename) {
+             await fetch('https://isjsbwjxvpmmgwvvksit.supabase.co/storage/v1/object/fuel-receipts/' + mapFilename, {
+                method: 'POST',
+                headers: { 
+                  'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzanNid2p4dnBtbWd3dnZrc2l0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MDY1ODUwOSwiZXhwIjoyMTA2MjM0NTA5fQ.ibmxLHoSd6ySCPvVZ8mjSUGe0t8M0eF_u3mJRV8Wbe8',
+                  'Content-Type': 'application/json',
+                  'x-upsert': 'true'
+                },
+                body: JSON.stringify(mapData)
+             });
+          }
+
+          const endpoint = modalType === 'expense' ? '/api/expenses' : '/api/trips';
+          const apiRes = await fetch(endpoint, {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify(payload)
+          });
+          if (!apiRes.ok) throw new Error("Database save failed");
+          
+          toast.dismiss();
+          toast.success(modalType === 'start' ? "Shift Started!" : (modalType === 'end' ? "Shift Ended!" : "Expense Submitted!"));
+      } catch (err) {
+          await saveOfflineTask(task);
+          setQueueCount(c => c + 1);
+          toast.dismiss();
+          toast.success("Network weak. Saved Offline! Will sync soon.");
+      }
       setShowModal(false);
     } catch (err) {
-      toast.dismiss();
-      toast.error("Network error during upload. Please try again.");
-      console.error(err);
+        toast.dismiss();
+        toast.error("An error occurred processing the photo.");
+        console.error(err);
     }
   };
 
