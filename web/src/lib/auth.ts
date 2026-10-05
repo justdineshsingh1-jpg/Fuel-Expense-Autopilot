@@ -5,7 +5,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 export const loginWithBackend = async (email: string, password: string):Promise<User> => {
   try {
     const formData = new URLSearchParams();
-    formData.append('username', email);
+    formData.append('username', email.trim());
     formData.append('password', password);
 
     const res = await fetch('/api/auth/login', {
