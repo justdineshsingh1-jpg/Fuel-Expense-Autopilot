@@ -46,42 +46,72 @@ export async function POST(request: Request) {
       let variancePercent = 0;
       const fraudFlags: any[] = [];
 
-      // 2. Fetch OSRM Road Distance if waypoints exist
+      // 2. SEGMENTED VALIDATION (GUWAHATI ADAPTIVE ENGINE)
+      let transitKm = 0;
+      let surveyKm = 0;
+
       if (body.waypoints && body.waypoints.length >= 2) {
-        // OSRM coordinates format: {lon},{lat};{lon},{lat}
-        const coordsString = body.waypoints
-          .map((pt: any) => `${pt.lng},${pt.lat}`)
-          .join(';');
+        
+        // Split waypoints into contiguous segments based on mode
+        const transitPoints = body.waypoints.filter((w: any) => w.mode === 'transit' || !w.mode);
+        const surveyPoints = body.waypoints.filter((w: any) => w.mode === 'survey');
 
-        const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${coordsString}?overview=false`;
-        try {
-          const osrmRes = await fetch(osrmUrl);
-          const osrmData = await osrmRes.json();
-
-          if (osrmData.code === 'Ok' && osrmData.routes?.length > 0) {
-            // OSRM returns distance in meters; convert to KM
-            const distanceMeters = osrmData.routes[0].distance;
-            osrmDistanceKm = Number((distanceMeters / 1000).toFixed(2));
-
-            // 3. Compute Variance Percentage
-            if (osrmDistanceKm > 0) {
-              variancePercent = Number(
-                (((claimedDistance - osrmDistanceKm) / osrmDistanceKm) * 100).toFixed(2)
-              );
+        // A. TRANSIT LEG -> OSRM Mapping
+        if (transitPoints.length >= 2) {
+          // OSRM coordinates format: {lon},{lat};{lon},{lat}
+          // Note: Standard OSRM URL max length is ~8000 chars. For long trips, chunking is needed.
+          // For now, we take up to 200 sparse points to prevent URL length crashes.
+          const sparseTransit = transitPoints.filter((_: any, i: number) => i % Math.ceil(transitPoints.length / 150) === 0);
+          const coordsString = sparseTransit.map((pt: any) => `${pt.lng},${pt.lat}`).join(';');
+          
+          try {
+            const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${coordsString}?overview=false`;
+            const osrmRes = await fetch(osrmUrl);
+            const osrmData = await osrmRes.json();
+            if (osrmData.code === 'Ok' && osrmData.routes?.length > 0) {
+              transitKm = Number((osrmData.routes[0].distance / 1000).toFixed(2));
             }
-
-            // 4. Fraud Flag Rules
-            if (variancePercent > 10) {
-              fraudFlags.push({
-                id: Date.now().toString(),
-                type: 'HIGH_ROUTE_VARIANCE',
-                severity: variancePercent > 25 ? 'CRITICAL' : 'HIGH',
-                description: `Claimed odometer (${claimedDistance} KM) exceeds map route (${osrmDistanceKm} KM) by ${variancePercent}%.`
-              });
-            }
+          } catch (e) {
+            console.error("OSRM Transit Error:", e);
           }
-        } catch (e) {
-          console.error("OSRM Error:", e);
+        }
+
+        // B. SURVEY CLUSTER -> Haversine Accumulation
+        if (surveyPoints.length >= 2) {
+          const R = 6371; // km
+          let rawDistance = 0;
+          for (let i = 1; i < surveyPoints.length; i++) {
+            const p1 = surveyPoints[i-1];
+            const p2 = surveyPoints[i];
+            const dLat = (p2.lat - p1.lat) * Math.PI / 180;
+            const dLon = (p2.lng - p1.lng) * Math.PI / 180;
+            const a = 
+              Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(p1.lat * Math.PI / 180) * Math.cos(p2.lat * Math.PI / 180) * 
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            rawDistance += R * c;
+          }
+          surveyKm = Number(rawDistance.toFixed(2));
+        }
+
+        osrmDistanceKm = transitKm + surveyKm; // Total Validated Distance
+
+        // 3. Compute Variance Percentage (18% Guwahati Buffer)
+        if (osrmDistanceKm > 0) {
+          variancePercent = Number(
+            (((claimedDistance - osrmDistanceKm) / osrmDistanceKm) * 100).toFixed(2)
+          );
+        }
+
+        // 4. Fraud Flag Rules (<= 18% is CLEAN)
+        if (variancePercent > 18) {
+          fraudFlags.push({
+            id: Date.now().toString(),
+            type: 'HIGH_ROUTE_VARIANCE',
+            severity: variancePercent > 30 ? 'CRITICAL' : 'HIGH',
+            description: `Claimed (${claimedDistance} KM) exceeds map route (${osrmDistanceKm} KM) by ${variancePercent}%. [Transit: ${transitKm} KM, Survey: ${surveyKm} KM]`
+          });
         }
       }
 
@@ -101,6 +131,8 @@ export async function POST(request: Request) {
       const updateData = {
         ...body,
         osrm_calculated_km: osrmDistanceKm,
+        transit_km: transitKm,
+        survey_cluster_km: surveyKm,
         variance_percent: variancePercent,
         fraud_flags: fraudFlags,
         distance_km: claimedDistance > 0 ? claimedDistance : 0,
