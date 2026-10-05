@@ -17,7 +17,36 @@ export async function POST(request: Request) {
     
     // SMART UPSERT LOGIC TO BYPASS SCHEMA CONSTRAINTS
     if (body.approval_status === 'active') {
-      // CHECK-IN: Satisfy NOT NULL constraints by duplicating start values
+      
+      // If this is an EXPENSE submission during an active trip, update the trip row instead of creating a new check-in
+      if (!body.start_reading && (body.fuel_amount || body.misc_amount)) {
+         const { data: activeTrips, error: fetchErr } = await supabaseAdmin
+          .from('trip_logs')
+          .select('id')
+          .eq('user_id', body.user_id)
+          .eq('approval_status', 'active')
+          .order('created_at', { ascending: false })
+          .limit(1);
+          
+         if (!fetchErr && activeTrips && activeTrips.length > 0) {
+            const { data, error } = await supabaseAdmin
+              .from('trip_logs')
+              .update({
+                fuel_amount: body.fuel_amount,
+                fuel_liters: body.fuel_liters,
+                fuel_bill_url: body.fuel_bill_url,
+                misc_amount: body.misc_amount,
+                misc_particulars: body.misc_particulars,
+                misc_bill_url: body.misc_bill_url
+              })
+              .eq('id', activeTrips[0].id)
+              .select();
+            if (error) throw error;
+            return NextResponse.json(data[0]);
+         }
+      }
+
+      // STANDARD CHECK-IN: Satisfy NOT NULL constraints by duplicating start values
       body.end_reading = body.start_reading;
       body.end_odometer_image_url = body.start_odometer_image_url;
       body.end_capture_timestamp = body.start_capture_timestamp;

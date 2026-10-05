@@ -17,8 +17,7 @@ import { formatCurrency, formatDate, cn } from '@/lib/utils';
 import { STATUS_LABELS } from '@/lib/constants';
 import { 
   ChevronDown, ChevronUp, Search, CheckCircle, XCircle, 
-  CornerUpLeft, Flag, MapPin, Camera 
-} from 'lucide-react';
+  CornerUpLeft, Flag, MapPin, Camera, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 // Mock data
@@ -128,6 +127,14 @@ export default function ApprovalsPage() {
     toast.success(`Action '${action}' applied to ${id}`);
   };
 
+  
+  const downloadMonthlyReport = () => {
+    // Pick the first agent as an example or default to current month
+    const userId = trips.length > 0 ? trips[0].userId : 'AGENT123';
+    const month = new Date().toISOString().substring(0, 7); // YYYY-MM
+    window.open(`/api/reports/monthly-conveyance?userId=${userId}&month=${month}`, '_blank');
+  };
+
   const handleBatchAction = () => {
     toast.success(`Approved ${selectedRows.size} claims`);
     setSelectedRows(new Set());
@@ -137,7 +144,12 @@ export default function ApprovalsPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-gray-900">Pending Approvals</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-2xl font-bold tracking-tight text-gray-900">Pending Approvals</h2>
+            <Button variant="outline" size="sm" onClick={downloadMonthlyReport} className="ml-4">
+              <Download className="h-4 w-4 mr-2" /> Monthly Conveyance Export
+            </Button>
+          </div>
           <p className="text-gray-500">Review and approve employee fuel claims.</p>
         </div>
         {selectedRows.size > 0 && (

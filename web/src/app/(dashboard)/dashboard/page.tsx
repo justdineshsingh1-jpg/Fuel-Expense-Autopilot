@@ -34,6 +34,8 @@ function FieldAgentDashboard({ user }: { user: any }) {
   
   // Odometer State
   const [odometerReading, setOdometerReading] = useState('');
+  const [particulars, setParticulars] = useState('Fuel');
+  const [fuelLiters, setFuelLiters] = useState('');
   const [routeLocations, setRouteLocations] = useState('');
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
@@ -120,7 +122,7 @@ function FieldAgentDashboard({ user }: { user: any }) {
           }
 
           // 3. Hit Database API
-          const endpoint = task.type === 'expense' ? 'https://fuel-expense-autopilot.vercel.app/api/expenses' : 'https://fuel-expense-autopilot.vercel.app/api/trips';
+          const endpoint = 'https://fuel-expense-autopilot.vercel.app/api/trips';
           const apiRes = await fetch(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -546,7 +548,7 @@ function FieldAgentDashboard({ user }: { user: any }) {
              });
           }
 
-          const endpoint = modalType === 'expense' ? 'https://fuel-expense-autopilot.vercel.app/api/expenses' : 'https://fuel-expense-autopilot.vercel.app/api/trips';
+          const endpoint = 'https://fuel-expense-autopilot.vercel.app/api/trips';
           const apiRes = await fetch(endpoint, {
              method: 'POST',
              headers: { 'Content-Type': 'application/json' },
