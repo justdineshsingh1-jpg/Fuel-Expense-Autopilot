@@ -814,7 +814,7 @@ export default function Dashboard() {
   const [adminTrips, setAdminTrips] = useState<any[]>([]);
   useEffect(() => {
     if (user?.role !== 'field_agent') {
-      fetch('/api/trips')
+      fetch('/api/trips', { cache: 'no-store' })
         .then(r => r.json())
         .then(data => { if (Array.isArray(data)) setAdminTrips(data); })
         .catch(console.error);
