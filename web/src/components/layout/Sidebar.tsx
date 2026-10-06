@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React from 'react';
 import Link from 'next/link';
@@ -60,6 +60,8 @@ export function Sidebar() {
     menuItems.push({ name: 'User Management', href: '/admin/users', icon: Users });
   }
 
+  menuItems.push({ name: 'Settings', href: '/profile', icon: Settings });
+
   return (
     <div className={cn(
       "fixed inset-y-0 left-0 z-40 w-64 bg-slate-900 text-slate-300 transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 flex flex-col",
@@ -99,15 +101,15 @@ export function Sidebar() {
       </nav>
 
       <div className="p-4 bg-slate-950/50 mt-auto">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-full bg-slate-700 flex items-center justify-center font-bold text-white uppercase">
+        <Link href="/profile" className="flex items-center gap-3 hover:bg-slate-800 p-2 rounded-md transition-colors cursor-pointer">
+          <div className="h-10 w-10 rounded-full bg-slate-700 flex items-center justify-center font-bold text-white uppercase shrink-0">
             {user.name.charAt(0)}
           </div>
           <div className="flex flex-col min-w-0">
             <span className="text-sm font-medium text-white truncate">{user.name}</span>
-            <span className="text-xs text-slate-400 truncate">{user.email}</span>
+            <span className="text-xs text-slate-400 truncate hover:text-white transition-colors">View Profile & Settings</span>
           </div>
-        </div>
+        </Link>
       </div>
     </div>
   );
