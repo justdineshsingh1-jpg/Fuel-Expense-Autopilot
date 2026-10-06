@@ -15,7 +15,7 @@ export default function ProfilePage() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
-  const handlePasswordChange = (e: React.FormEvent) => {
+  const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword !== confirmPassword) {
       toast.error('New passwords do not match');
@@ -26,10 +26,30 @@ export default function ProfilePage() {
       return;
     }
     
-    toast.success('Password updated successfully');
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
+    const promise = fetch('/api/users/change-password', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: user?.id,
+        current_password: currentPassword,
+        new_password: newPassword
+      })
+    }).then(async (res) => {
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update password');
+      return data;
+    });
+
+    toast.promise(promise, {
+      loading: 'Updating password...',
+      success: () => {
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+        return 'Password updated successfully';
+      },
+      error: (err) => err.message
+    });
   };
 
   if (!user) return null;
