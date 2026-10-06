@@ -180,6 +180,7 @@ export async function POST(request: Request) {
         survey_cluster_km: surveyKm,
         variance_percent: variancePercent,
         fraud_flags: fraudFlags,
+        has_anomalies: fraudFlags.length > 0, // 18% Buffer Check explicitly flagged here
         distance_km: claimedDistance > 0 ? claimedDistance : 0,
         approval_status: 'pending'
       };
