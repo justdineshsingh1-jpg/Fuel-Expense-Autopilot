@@ -22,13 +22,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ detail: "Missing credentials" }, { status: 400 });
     }
     
-    const searchEmail = email.toLowerCase().trim();
+    const searchKey = email.trim(); // The mobile app might send employee code in the 'username/email' field
 
-    // Query Supabase
+    // Query Supabase for either Email or Employee Code
     const { data: users, error } = await supabaseAdmin
       .from('users')
       .select('*')
-      .ilike('email', searchEmail)
+      .or(`email.ilike.${searchKey.toLowerCase()},employee_code.ilike.${searchKey}`)
       .limit(1);
 
     if (error || !users || users.length === 0) {
