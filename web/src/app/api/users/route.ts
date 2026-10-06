@@ -1,7 +1,9 @@
-export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import bcrypt from 'bcryptjs';
+
+export const dynamic = 'force-dynamic';
+
 
 export async function GET() {
   try {
