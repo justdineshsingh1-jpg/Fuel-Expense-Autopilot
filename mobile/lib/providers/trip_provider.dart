@@ -1,17 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import '../models/trip_log.dart';
 import '../services/trip_service.dart';
+import '../services/location_service.dart';
 import 'auth_provider.dart';
 
 class TripProvider with ChangeNotifier {
   final TripService _tripService = TripService();
+  final LocationService _locationService = LocationService();
   AuthProvider? _authProvider;
   
   List<TripLog> _trips = [];
   bool _isLoading = false;
 
+  // Active Trip State
+  bool _isTripActive = false;
+  List<Map<String, dynamic>> _currentWaypoints = [];
+  String? _activeTripId;
+
   List<TripLog> get trips => _trips;
   bool get isLoading => _isLoading;
+  bool get isTripActive => _isTripActive;
+  int get currentWaypointsCount => _currentWaypoints.length;
 
   void updateAuth(AuthProvider auth) {
     _authProvider = auth;
@@ -28,19 +38,77 @@ class TripProvider with ChangeNotifier {
     try {
       _trips = await _tripService.getTrips();
     } catch (e) {
-      // Handle error
+      print(e);
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  Future<bool> saveTrip(TripLog trip) async {
+  Future<bool> startTrip(String startReading, String imageUrl) async {
     _isLoading = true;
     notifyListeners();
     try {
-      final savedTrip = await _tripService.saveTrip(trip);
-      _trips.add(savedTrip);
+      final payload = {
+        'user_id': _authProvider?.userId ?? '',
+        'approval_status': 'active',
+        'start_reading': startReading,
+        'start_odometer_image_url': imageUrl,
+        'start_capture_timestamp': DateTime.now().toIso8601String(),
+      };
+      
+      final activeTrip = await _tripService.saveTrip(payload);
+      _activeTripId = activeTrip.id;
+      _isTripActive = true;
+      _currentWaypoints = [];
+      
+      // Start Background GPS Engine
+      await _locationService.startBackgroundTracking((Position pos, String mode) {
+        _currentWaypoints.add({
+          'lat': pos.latitude,
+          'lng': pos.longitude,
+          'mode': mode,
+          'timestamp': DateTime.now().toIso8601String(),
+          'accuracy': pos.accuracy,
+          'speed': pos.speed,
+        });
+        notifyListeners(); // Update UI with new points
+      });
+
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> endTrip(String endReading, String imageUrl, double fuelAmount, double miscAmount, String remarks) async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      _locationService.stopTracking();
+      _isTripActive = false;
+
+      final payload = {
+        'user_id': _authProvider?.userId ?? '',
+        'approval_status': 'pending', // Marks for checkout routing on backend
+        'end_reading': endReading,
+        'end_odometer_image_url': imageUrl,
+        'end_capture_timestamp': DateTime.now().toIso8601String(),
+        'waypoints': _currentWaypoints,
+        'fuel_amount': fuelAmount,
+        'misc_amount': miscAmount,
+        'misc_particulars': remarks,
+      };
+
+      final completedTrip = await _tripService.saveTrip(payload);
+      _trips.insert(0, completedTrip); // Add to local state
+      
+      _currentWaypoints = [];
+      _activeTripId = null;
       _isLoading = false;
       notifyListeners();
       return true;
