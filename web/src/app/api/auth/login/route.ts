@@ -21,12 +21,14 @@ export async function POST(request: Request) {
     if (!email || !password) {
       return NextResponse.json({ detail: "Missing credentials" }, { status: 400 });
     }
+    
+    const searchEmail = email.toLowerCase().trim();
 
     // Query Supabase
     const { data: users, error } = await supabaseAdmin
       .from('users')
       .select('*')
-      .eq('email', email)
+      .ilike('email', searchEmail)
       .limit(1);
 
     if (error || !users || users.length === 0) {

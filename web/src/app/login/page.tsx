@@ -71,14 +71,15 @@ export default function LoginPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email })
     }).then(async res => {
-      if (!res.ok) throw new Error();
-      return res.json();
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to reset password');
+      return data;
     });
 
     toast.promise(promise, {
       loading: 'Resetting password...',
       success: 'Password has been reset to: password123 (Please login and change it in your Profile)',
-      error: 'Failed to reset password.'
+      error: (err) => err.message
     });
   };
 

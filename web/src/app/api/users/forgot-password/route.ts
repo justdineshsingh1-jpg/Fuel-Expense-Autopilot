@@ -6,22 +6,23 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   try {
-    const { email } = await request.json();
+    const { email: rawEmail } = await request.json();
 
-    if (!email) {
+    if (!rawEmail) {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 });
     }
+    
+    const email = rawEmail.toLowerCase().trim();
 
     // 1. Verify user exists
     const { data: user, error: fetchError } = await supabaseAdmin
       .from('users')
       .select('id')
-      .eq('email', email)
+      .ilike('email', email)
       .single();
 
     if (fetchError || !user) {
-      // Return success even if not found to prevent email enumeration
-      return NextResponse.json({ success: true });
+      return NextResponse.json({ error: 'No user found with that email address' }, { status: 404 });
     }
 
     // 2. Reset password to password123
