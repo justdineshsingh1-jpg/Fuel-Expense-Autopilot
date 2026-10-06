@@ -3,9 +3,22 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 export async function GET(request: Request) {
   try {
-    const { data, error } = await supabaseAdmin.from('trip_logs').select('*').order('created_at', { ascending: false });
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    let query = supabaseAdmin
+      .from('trip_logs')
+      .select('*, users (full_name, employee_code, department)')
+      .order('created_at', { ascending: false });
+      
+    if (id) {
+      query = query.eq('id', id);
+    }
+
+    const { data, error } = await query;
     if (error) throw error;
-    return NextResponse.json(data);
+    
+    return NextResponse.json(id ? (data[0] || null) : data);
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
