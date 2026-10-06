@@ -99,6 +99,12 @@ class LocationService {
     _lastSavedPos = null;
   }
 
+  Future<Position> getCurrentLocation() async {
+    return await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    );
+  }
+
   Future<String> getAddressFromLatLng(double lat, double lng) async {
     try {
       List<Placemark> placemarks = await placemarkFromCoordinates(lat, lng);

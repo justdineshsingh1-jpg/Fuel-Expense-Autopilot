@@ -50,7 +50,7 @@ class TripProvider with ChangeNotifier {
     notifyListeners();
     try {
       final payload = {
-        'user_id': _authProvider?.userId ?? '',
+        'user_id': _authProvider?.user?.id ?? '',
         'approval_status': 'active',
         'start_reading': startReading,
         'start_odometer_image_url': imageUrl,
@@ -93,7 +93,7 @@ class TripProvider with ChangeNotifier {
       _isTripActive = false;
 
       final payload = {
-        'user_id': _authProvider?.userId ?? '',
+        'user_id': _authProvider?.user?.id ?? '',
         'approval_status': 'pending', // Marks for checkout routing on backend
         'end_reading': endReading,
         'end_odometer_image_url': imageUrl,

@@ -13,15 +13,15 @@ class TripService {
         return (response.data as List).map((t) => TripLog(
           id: t['id'],
           employeeId: t['user_id'] ?? '',
-          date: t['created_at']?.substring(0, 10) ?? '',
-          startReading: t['start_reading']?.toString() ?? '',
-          startOdometerImageUrl: t['start_odometer_image_url'],
-          endReading: t['end_reading']?.toString(),
-          endOdometerImageUrl: t['end_odometer_image_url'],
-          distanceKm: t['distance_km']?.toDouble(),
+          date: DateTime.tryParse(t['created_at'] ?? '') ?? DateTime.now(),
+          startReading: double.tryParse(t['start_reading']?.toString() ?? '') ?? 0.0,
+          startOdometerImageUrl: t['start_odometer_image_url'] ?? '',
+          endReading: double.tryParse(t['end_reading']?.toString() ?? '') ?? 0.0,
+          endOdometerImageUrl: t['end_odometer_image_url'] ?? '',
+          distanceKm: t['distance_km']?.toDouble() ?? 0.0,
           locations: [], // Avoid parsing massive array for list view
           status: t['approval_status'] ?? 'pending',
-          flags: t['fraud_flags'] ?? [],
+          flags: [],
         )).toList();
       }
       return [];
@@ -42,15 +42,15 @@ class TripService {
       return TripLog(
         id: t['id'],
         employeeId: t['user_id'] ?? '',
-        date: t['created_at']?.substring(0, 10) ?? '',
-        startReading: t['start_reading']?.toString() ?? '',
-        startOdometerImageUrl: t['start_odometer_image_url'],
-        endReading: t['end_reading']?.toString(),
-        endOdometerImageUrl: t['end_odometer_image_url'],
-        distanceKm: t['distance_km']?.toDouble(),
+        date: DateTime.tryParse(t['created_at'] ?? '') ?? DateTime.now(),
+        startReading: double.tryParse(t['start_reading']?.toString() ?? '') ?? 0.0,
+        startOdometerImageUrl: t['start_odometer_image_url'] ?? '',
+        endReading: double.tryParse(t['end_reading']?.toString() ?? '') ?? 0.0,
+        endOdometerImageUrl: t['end_odometer_image_url'] ?? '',
+        distanceKm: t['distance_km']?.toDouble() ?? 0.0,
         locations: [],
         status: t['approval_status'] ?? 'pending',
-        flags: t['fraud_flags'] ?? [],
+        flags: [],
       );
     } catch (e) {
       print("Save Trip Error: $e");
