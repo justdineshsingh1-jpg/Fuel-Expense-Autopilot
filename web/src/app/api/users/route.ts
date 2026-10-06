@@ -45,3 +45,32 @@ export async function POST(request: Request) {
     return NextResponse.json({ detail: err.message }, { status: 500 });
   }
 }
+
+
+export async function PUT(request: Request) {
+  try {
+    const body = await request.json();
+    const { id, full_name, email, employee_code, role, department } = body;
+
+    if (!id) {
+      return NextResponse.json({ error: 'Missing user ID' }, { status: 400 });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('users')
+      .update({
+        full_name,
+        email,
+        employee_code,
+        role,
+        department
+      })
+      .eq('id', id)
+      .select();
+
+    if (error) throw error;
+    return NextResponse.json(data[0] || { success: true });
+  } catch (err: any) {
+    return NextResponse.json({ detail: err.message }, { status: 500 });
+  }
+}

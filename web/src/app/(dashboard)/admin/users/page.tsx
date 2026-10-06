@@ -16,6 +16,8 @@ export default function UsersPage() {
   
   const [users, setUsers] = useState<any[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   
   // Form State
@@ -105,6 +107,39 @@ export default function UsersPage() {
     }
   };
 
+  const openEditModal = (u: any) => {
+    setEditingUser(u);
+    setShowEditModal(true);
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    setIsLoading(true);
+    toast.loading("Updating agent...");
+    
+    try {
+      const res = await fetch('/api/users', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editingUser)
+      });
+
+      if (!res.ok) throw new Error("Failed to update user");
+      
+      await fetchUsers();
+      toast.dismiss();
+      toast.success('Agent updated successfully!');
+      setShowEditModal(false);
+      setEditingUser(null);
+    } catch (err) {
+      toast.dismiss();
+      toast.error('Error updating user');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleDeleteUser = async (id: string) => {
     if (!confirm('Are you sure you want to delete this agent?')) return;
     toast.error('Delete disabled in this demo');
@@ -166,7 +201,7 @@ export default function UsersPage() {
                       <button onClick={() => handleResetPassword(u.id, u.full_name)} className="text-orange-500 hover:text-orange-700 p-2 inline-flex items-center gap-1 font-bold text-xs bg-orange-50 rounded-md border border-orange-200 mr-2" title="Reset Password to password123">
                         <Key className="h-4 w-4" /> Reset Pwd
                       </button>
-                      <button onClick={() => alert('Edit agent coming soon!')} className="text-blue-600 hover:text-blue-800 p-2"><Edit className="h-4 w-4" /></button>
+                      <button onClick={() => openEditModal(u)} className="text-blue-600 hover:text-blue-800 p-2"><Edit className="h-4 w-4" /></button>
                     <button onClick={() => handleDeleteUser(u.id)} className="text-red-500 hover:text-red-700 p-2"><Trash className="h-4 w-4" /></button>
                   </td>
                 </tr>
