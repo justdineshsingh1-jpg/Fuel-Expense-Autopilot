@@ -165,101 +165,132 @@ function FieldAgentDashboard({ user }: { user: any }) {
     };
   }, []);
 
-  // ADAPTIVE BACKGROUND GPS ENGINE (GUWAHATI SPEC)
+  // ADAPTIVE BACKGROUND GPS ENGINE (NATIVE & WEB FALLBACK)
   useEffect(() => {
     if (!tripActive) return;
 
-    let watchId: string;
+    let watcherId: string | null = null;
+    let webWatchId: number | null = null;
     let lastMode = 'transit'; 
     let stationaryStartTime = 0;
     let lastSavedPos: any = null;
     let modeDebounceStart = 0;
 
-    const initAdaptiveTracker = async () => {
-      try {
-        const { Geolocation } = await import('@capacitor/geolocation');
-        
-        watchId = await Geolocation.watchPosition({ enableHighAccuracy: true }, (pos, err) => {
-          if (err || !pos) return;
+    const processLocation = (pos: any) => {
+      // 1. Accuracy Filter
+      if (pos.accuracy && pos.accuracy > 20) return; // Discard bad indoor bounces
 
-          // 1. Accuracy Filter
-          if (pos.coords.accuracy > 20) return; // Discard bad indoor bounces
+      const speedKmh = (pos.speed || 0) * 3.6; // Convert m/s to km/h
+      const now = Date.now();
 
-          const speedKmh = (pos.coords.speed || 0) * 3.6; // Convert m/s to km/h
-          const now = Date.now();
+      // 2. Stationary Freeze Logic
+      if (speedKmh < 2) {
+        if (stationaryStartTime === 0) stationaryStartTime = now;
+        // If stationary for > 3 minutes (180000ms), freeze listener
+        if (now - stationaryStartTime > 180000) return;
+      } else {
+        stationaryStartTime = 0; // Reset
+      }
 
-          // 2. Stationary Freeze Logic
-          if (speedKmh < 2) {
-            if (stationaryStartTime === 0) stationaryStartTime = now;
-            // If stationary for > 3 minutes (180000ms), freeze listener
-            if (now - stationaryStartTime > 180000) return;
-          } else {
-            stationaryStartTime = 0; // Reset
-          }
+      // 3. Hysteresis Buffer (Mode Determination - 45s Debounce)
+      let targetMode = speedKmh > 20 ? 'transit' : 'survey';
+      
+      if (targetMode !== lastMode) {
+        if (modeDebounceStart === 0) modeDebounceStart = now;
+        // Only switch modes if 45 seconds have passed continuously
+        if (now - modeDebounceStart >= 45000) {
+          lastMode = targetMode;
+          modeDebounceStart = 0;
+        }
+      } else {
+        modeDebounceStart = 0; 
+      }
+      
+      let currentMode = lastMode;
 
-          // 3. Hysteresis Buffer (Mode Determination - 45s Debounce)
-          let targetMode = speedKmh > 20 ? 'transit' : 'survey';
-          
-          if (targetMode !== lastMode) {
-            if (modeDebounceStart === 0) modeDebounceStart = now;
-            // Only switch modes if 45 seconds have passed continuously
-            if (now - modeDebounceStart >= 45000) {
-              lastMode = targetMode;
-              modeDebounceStart = 0;
-            }
-          } else {
-            modeDebounceStart = 0; 
-          }
-          
-          let currentMode = lastMode;
+      // 4. Distance Filter
+      if (lastSavedPos) {
+        const R = 6371e3;
+        const p1 = lastSavedPos.lat * Math.PI/180;
+        const p2 = pos.latitude * Math.PI/180;
+        const dp = (pos.latitude-lastSavedPos.lat) * Math.PI/180;
+        const dl = (pos.longitude-lastSavedPos.lng) * Math.PI/180;
+        const a = Math.sin(dp/2) * Math.sin(dp/2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl/2) * Math.sin(dl/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        const distanceMeters = R * c;
 
-          // 4. Distance Filter Simulation (since Capacitor core lacks native dynamic distance filters)
-          if (lastSavedPos) {
-            const R = 6371e3;
-            const p1 = lastSavedPos.lat * Math.PI/180;
-            const p2 = pos.coords.latitude * Math.PI/180;
-            const dp = (pos.coords.latitude-lastSavedPos.lat) * Math.PI/180;
-            const dl = (pos.coords.longitude-lastSavedPos.lng) * Math.PI/180;
-            const a = Math.sin(dp/2) * Math.sin(dp/2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl/2) * Math.sin(dl/2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-            const distanceMeters = R * c;
+        if (currentMode === 'transit' && distanceMeters < 100) return; // Log every 100m
+        if (currentMode === 'survey' && distanceMeters < 10) return;  // Log every 10m
+      }
 
-            // Filter logic
-            if (currentMode === 'transit' && distanceMeters < 100) return; // Log every 100m
-            if (currentMode === 'survey' && distanceMeters < 10) return;  // Log every 10m
-          }
+      // Valid point passed all filters!
+      const wp = {
+        lat: pos.latitude,
+        lng: pos.longitude,
+        timestamp: new Date().toISOString(),
+        speed: speedKmh,
+        mode: currentMode
+      };
 
-          // Valid point passed all filters!
-          const wp = {
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-            timestamp: new Date().toISOString(),
-            speed: speedKmh,
-            mode: currentMode
-          };
+      lastSavedPos = wp;
 
-          lastSavedPos = wp;
-
-          const saved = localStorage.getItem('dailyTripStatus');
-          if (saved) {
-            const data = JSON.parse(saved);
-            if (!data.waypoints) data.waypoints = [];
-            data.waypoints.push(wp);
-            localStorage.setItem('dailyTripStatus', JSON.stringify(data));
-          }
-        });
-      } catch(e) {
-        console.error("GPS Init Error", e);
+      const saved = localStorage.getItem('dailyTripStatus');
+      if (saved) {
+        const data = JSON.parse(saved);
+        if (!data.waypoints) data.waypoints = [];
+        data.waypoints.push(wp);
+        localStorage.setItem('dailyTripStatus', JSON.stringify(data));
       }
     };
 
-    initAdaptiveTracker();
+    const initTracker = async () => {
+      try {
+        const { registerPlugin } = await import('@capacitor/core');
+        const BackgroundGeolocation = registerPlugin<any>('BackgroundGeolocation');
+        
+        // Try starting the Native Background Geolocation (Works flawlessly when minimized in APK)
+        watcherId = await BackgroundGeolocation.addWatcher(
+          {
+            requestPermissions: true,
+            stale: false,
+            distanceFilter: 10,
+            backgroundMessage: "Tracking your trip route in the background.",
+            backgroundTitle: "Fuel Expense Autopilot Active"
+          },
+          (location: any, error: any) => {
+            if (error) return;
+            if (location) processLocation(location);
+          }
+        );
+      } catch(e) {
+        console.log("Native Background Geolocation not available. Falling back to web...");
+        // Web fallback (Will pause when browser is minimized, inherent OS limitation)
+        if ('geolocation' in navigator) {
+          webWatchId = navigator.geolocation.watchPosition(
+            (pos) => processLocation({
+              latitude: pos.coords.latitude,
+              longitude: pos.coords.longitude,
+              accuracy: pos.coords.accuracy,
+              speed: pos.coords.speed
+            }),
+            null,
+            { enableHighAccuracy: true }
+          );
+        }
+      }
+    };
+
+    initTracker();
 
     return () => {
-      if (watchId) {
-        import('@capacitor/geolocation').then(({ Geolocation }) => {
-          Geolocation.clearWatch({ id: watchId });
+      if (watcherId) {
+        import('@capacitor/core').then(({ registerPlugin }) => {
+          const BackgroundGeolocation = registerPlugin<any>('BackgroundGeolocation');
+          BackgroundGeolocation.removeWatcher({ id: watcherId });
         });
+      }
+      if (webWatchId !== null && 'geolocation' in navigator) {
+        navigator.geolocation.clearWatch(webWatchId);
       }
     };
   }, [tripActive]);
