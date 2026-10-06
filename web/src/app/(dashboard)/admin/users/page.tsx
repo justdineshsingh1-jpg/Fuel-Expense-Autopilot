@@ -269,6 +269,61 @@ export default function UsersPage() {
           </div>
         </div>
       )}
+
+      {showEditModal && editingUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-200">
+            <div className="bg-slate-900 p-4 text-white flex justify-between items-center">
+              <h3 className="font-bold text-lg">Edit Agent Profile</h3>
+              <button onClick={() => setShowEditModal(false)} className="text-gray-400 hover:text-white"><X className="h-6 w-6" /></button>
+            </div>
+            
+            <form onSubmit={handleEditSubmit} className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Full Name</label>
+                  <input type="text" required value={editingUser.full_name || ''} onChange={e => setEditingUser({...editingUser, full_name: e.target.value})} className="w-full border rounded-lg px-3 py-2" />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Employee Code</label>
+                  <input type="text" required value={editingUser.employee_code || ''} onChange={e => setEditingUser({...editingUser, employee_code: e.target.value})} className="w-full border rounded-lg px-3 py-2" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Email Address</label>
+                <input type="email" required value={editingUser.email || ''} onChange={e => setEditingUser({...editingUser, email: e.target.value})} className="w-full border rounded-lg px-3 py-2" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Role</label>
+                  <select value={editingUser.role || ''} onChange={e => setEditingUser({...editingUser, role: e.target.value})} className="w-full border rounded-lg px-3 py-2 bg-white">
+                    <option value="field_agent">Field Agent</option>
+                    <option value="team_leader">Team Leader</option>
+                    <option value="manager">Manager</option>
+                    <option value="managing_director">Managing Director</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Department</label>
+                  <select value={editingUser.department || ''} onChange={e => setEditingUser({...editingUser, department: e.target.value})} className="w-full border rounded-lg px-3 py-2 bg-white">
+                    <option value="Sales">Sales</option>
+                    <option value="Operations">Operations</option>
+                    <option value="Service">Service</option>
+                    <option value="Executive">Executive</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="pt-4 flex justify-end gap-3">
+                <Button type="button" variant="outline" onClick={() => setShowEditModal(false)}>Cancel</Button>
+                <Button type="submit" disabled={isLoading}>{isLoading ? 'Saving...' : 'Update Agent'}</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
