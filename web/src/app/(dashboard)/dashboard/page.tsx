@@ -814,20 +814,38 @@ export default function Dashboard() {
   const [adminTrips, setAdminTrips] = useState<any[]>([]);
   useEffect(() => {
     if (user?.role !== 'field_agent') {
-      fetch('https://fuel-expense-autopilot.vercel.app/api/trips')
+      fetch('/api/trips')
         .then(r => r.json())
         .then(data => { if (Array.isArray(data)) setAdminTrips(data); })
         .catch(console.error);
     }
   }, [user]);
 
-  const activeCount = adminTrips.filter(t => t.approval_status === 'active').length;
+  // Compute Live Metrics
+  const totalExpense = adminTrips.reduce((sum, t) => sum + (Number(t.fuel_amount) || 0) + (Number(t.misc_amount) || 0), 0);
   const pendingCount = adminTrips.filter(t => t.approval_status === 'pending').length;
+  const fraudCount = adminTrips.filter(t => t.fraud_flags && Array.isArray(t.fraud_flags) && t.fraud_flags.length > 0).length;
+  const reconciledCount = adminTrips.filter(t => t.approval_status === 'approved').length;
 
-  const mockTrendData = [{ name: 'Today', amount: 0 }];
-  
-  const mockDeptData = [{ name: 'No Data', value: 1 }];
-  const COLORS = ['#3b82f6', '#10b981', '#f59e0b'];
+  // Trend Data (Group by date)
+  const trends: Record<string, number> = {};
+  adminTrips.forEach(t => {
+    const date = t.log_date || (t.created_at ? t.created_at.substring(0, 10) : 'Unknown');
+    trends[date] = (trends[date] || 0) + (Number(t.fuel_amount) || 0) + (Number(t.misc_amount) || 0);
+  });
+  let trendData = Object.keys(trends).map(k => ({ name: k, amount: trends[k] }));
+  if (trendData.length === 0) trendData = [{ name: 'No Data', amount: 0 }];
+
+  // Department Breakdown
+  const depts: Record<string, number> = {};
+  adminTrips.forEach(t => {
+    const dept = t.users?.department || 'Operations';
+    depts[dept] = (depts[dept] || 0) + (Number(t.fuel_amount) || 0) + (Number(t.misc_amount) || 0);
+  });
+  let deptData = Object.keys(depts).map(k => ({ name: k, value: depts[k] }));
+  if (deptData.length === 0) deptData = [{ name: 'No Data', value: 1 }];
+
+  const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
   return (
     <div className="space-y-6">
@@ -836,10 +854,10 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        <StatsCard title="Total Expense (MTD)" value="₹0" trend={{ value: 12, isPositive: false }} icon={IndianRupee} />
-        <StatsCard title="Pending Approvals" value="0" icon={FileText} />
-        <StatsCard title="Fraud Flags" value="0" trend={{ value: 2, isPositive: false }} icon={AlertTriangle} />
-        <StatsCard title="Reconciled" value="0" trend={{ value: 8, isPositive: true }} icon={CheckCircle2} />
+        <StatsCard title="Total Expense (All Time)" value={`₹${totalExpense.toLocaleString()}`} icon={IndianRupee} />
+        <StatsCard title="Pending Approvals" value={pendingCount.toString()} icon={FileText} />
+        <StatsCard title="Fraud Flags" value={fraudCount.toString()} icon={AlertTriangle} />
+        <StatsCard title="Reconciled" value={reconciledCount.toString()} icon={CheckCircle2} />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -850,10 +868,10 @@ export default function Dashboard() {
           <CardBody>
             <div className="h-[300px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={mockTrendData}>
+                <LineChart data={trendData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#6B7280' }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6B7280' }} tickFormatter={(val) => `₹${val/1000}k`} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6B7280' }} tickFormatter={(val) => `₹${val}`} />
                   <RechartsTooltip cursor={{ stroke: '#9CA3AF', strokeWidth: 1, strokeDasharray: '4 4' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
                   <Line type="monotone" dataKey="amount" stroke="#0ea5e9" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6, strokeWidth: 0 }} />
                 </LineChart>
@@ -864,14 +882,14 @@ export default function Dashboard() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Department Breakdown</CardTitle>
+            <CardTitle>Department Breakdown (₹)</CardTitle>
           </CardHeader>
           <CardBody>
             <div className="h-[300px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={mockDeptData} cx="50%" cy="50%" innerRadius={80} outerRadius={110} paddingAngle={5} dataKey="value">
-                    {mockDeptData.map((entry, index) => (
+                  <Pie data={deptData} cx="50%" cy="50%" innerRadius={80} outerRadius={110} paddingAngle={5} dataKey="value">
+                    {deptData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
