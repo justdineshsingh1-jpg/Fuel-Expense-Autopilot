@@ -13,14 +13,15 @@ import { useRouter } from 'next/navigation';
 export default function UsersPage() {
   const { user } = useAuthStore();
   const router = useRouter();
-  
+
+  // ALL state must be before any early return
   const [users, setUsers] = useState<any[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
-  
-  // Form State
+
+  // Add form state
   const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserCode, setNewUserCode] = useState('');
@@ -28,14 +29,24 @@ export default function UsersPage() {
   const [newUserRole, setNewUserRole] = useState('field_agent');
   const [newUserDept, setNewUserDept] = useState('Sales');
 
+  // ALL effects must be before any early return
   useEffect(() => {
     fetchUsers();
   }, []);
 
-  
+  // ALL functions must be before any early return
+  const fetchUsers = async () => {
+    try {
+      const res = await fetch('/api/users', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        setUsers(data);
+      }
+    } catch (e) {}
+  };
+
   const handleResetPassword = async (userId: string, userName: string) => {
-    if (!confirm(`Are you sure you want to reset the password for ${userName}? It will be reset to: password123`)) return;
-    
+    if (!confirm(`Reset password for ${userName} to: password123?`)) return;
     const promise = fetch('/api/users/reset-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -44,7 +55,6 @@ export default function UsersPage() {
       if (!res.ok) throw new Error('Failed to reset');
       return res.json();
     });
-
     toast.promise(promise, {
       loading: 'Resetting password...',
       success: 'Password reset to: password123',
@@ -52,63 +62,8 @@ export default function UsersPage() {
     });
   };
 
-  const fetchUsers = async () => {
-    try {
-      const res = await fetch('/api/users', { cache: 'no-store' });
-      if (res.ok) {
-        const data = await res.json();
-        setUsers(data);
-      }
-    } catch(e) {}
-  };
-
-  if (user?.role !== 'managing_director') {
-    return (
-      <div className="flex flex-col items-center justify-center h-[60vh] text-center space-y-4">
-        <AlertTriangle className="h-16 w-16 text-yellow-500" />
-        <h1 className="text-2xl font-bold text-gray-900">Access Denied</h1>
-        <p className="text-gray-500">Only the Managing Director can access the Master Control Panel.</p>
-        <Button onClick={() => router.push('/dashboard')}>Return to Dashboard</Button>
-      </div>
-    );
-  }
-
-  const handleAddUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    toast.loading("Creating user...");
-    
-    try {
-      const res = await fetch('/api/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          full_name: newUserName,
-          email: newUserEmail,
-          employee_code: newUserCode,
-          password: newUserPassword,
-          role: newUserRole,
-          department: newUserDept
-        })
-      });
-
-      if (!res.ok) throw new Error("Failed to create user");
-      
-      await fetchUsers();
-      toast.dismiss();
-      toast.success('Agent created successfully!');
-      setShowAddModal(false);
-      setNewUserName(''); setNewUserEmail(''); setNewUserCode(''); setNewUserPassword('');
-    } catch (err) {
-      toast.dismiss();
-      toast.error('Error creating user');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const openEditModal = (u: any) => {
-    setEditingUser(u);
+    setEditingUser({ ...u });
     setShowEditModal(true);
   };
 
@@ -116,17 +71,21 @@ export default function UsersPage() {
     e.preventDefault();
     if (!editingUser) return;
     setIsLoading(true);
-    toast.loading("Updating agent...");
-    
+    toast.loading('Updating agent...');
     try {
       const res = await fetch('/api/users', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editingUser)
+        body: JSON.stringify({
+          id: editingUser.id,
+          full_name: editingUser.full_name,
+          email: editingUser.email,
+          employee_code: editingUser.employee_code,
+          role: editingUser.role,
+          department: editingUser.department,
+        })
       });
-
-      if (!res.ok) throw new Error("Failed to update user");
-      
+      if (!res.ok) throw new Error('Failed to update user');
       await fetchUsers();
       toast.dismiss();
       toast.success('Agent updated successfully!');
@@ -140,10 +99,53 @@ export default function UsersPage() {
     }
   };
 
+  const handleAddUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    toast.loading('Creating user...');
+    try {
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          full_name: newUserName,
+          email: newUserEmail,
+          employee_code: newUserCode,
+          password: newUserPassword,
+          role: newUserRole,
+          department: newUserDept
+        })
+      });
+      if (!res.ok) throw new Error('Failed to create user');
+      await fetchUsers();
+      toast.dismiss();
+      toast.success('Agent created successfully!');
+      setShowAddModal(false);
+      setNewUserName(''); setNewUserEmail(''); setNewUserCode(''); setNewUserPassword('');
+    } catch (err) {
+      toast.dismiss();
+      toast.error('Error creating user');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleDeleteUser = async (id: string) => {
     if (!confirm('Are you sure you want to delete this agent?')) return;
     toast.error('Delete disabled in this demo');
   };
+
+  // Early return AFTER all hooks and functions
+  if (user?.role !== 'managing_director') {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] text-center space-y-4">
+        <AlertTriangle className="h-16 w-16 text-yellow-500" />
+        <h1 className="text-2xl font-bold text-gray-900">Access Denied</h1>
+        <p className="text-gray-500">Only the Managing Director can access the Master Control Panel.</p>
+        <Button onClick={() => router.push('/dashboard')}>Return to Dashboard</Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -173,7 +175,7 @@ export default function UsersPage() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {users.length === 0 ? (
-                <tr><td colSpan={5} className="text-center py-10 text-gray-500">No agents found in database. Add one to start testing!</td></tr>
+                <tr><td colSpan={5} className="text-center py-10 text-gray-500">No agents found.</td></tr>
               ) : users.map((u) => (
                 <tr key={u.id} className="hover:bg-gray-50/50">
                   <td className="px-6 py-4">
@@ -197,12 +199,27 @@ export default function UsersPage() {
                     </Badge>
                   </td>
                   <td className="px-6 py-4 text-right">
-                    
-                      <button onClick={() => handleResetPassword(u.id, u.full_name)} className="text-orange-500 hover:text-orange-700 p-2 inline-flex items-center gap-1 font-bold text-xs bg-orange-50 rounded-md border border-orange-200 mr-2" title="Reset Password to password123">
-                        <Key className="h-4 w-4" /> Reset Pwd
-                      </button>
-                      <button onClick={() => openEditModal(u)} className="text-blue-600 hover:text-blue-800 p-2"><Edit className="h-4 w-4" /></button>
-                    <button onClick={() => handleDeleteUser(u.id)} className="text-red-500 hover:text-red-700 p-2"><Trash className="h-4 w-4" /></button>
+                    <button
+                      onClick={() => handleResetPassword(u.id, u.full_name)}
+                      className="text-orange-500 hover:text-orange-700 p-2 inline-flex items-center gap-1 font-bold text-xs bg-orange-50 rounded-md border border-orange-200 mr-2"
+                      title="Reset Password to password123"
+                    >
+                      <Key className="h-4 w-4" /> Reset Pwd
+                    </button>
+                    <button
+                      onClick={() => openEditModal(u)}
+                      className="text-blue-600 hover:text-blue-800 p-2 inline-flex items-center gap-1 bg-blue-50 rounded-md border border-blue-200 mr-2"
+                      title="Edit Agent"
+                    >
+                      <Edit className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteUser(u.id)}
+                      className="text-red-500 hover:text-red-700 p-2 inline-flex items-center gap-1 bg-red-50 rounded-md border border-red-200"
+                      title="Delete Agent"
+                    >
+                      <Trash className="h-4 w-4" />
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -211,14 +228,14 @@ export default function UsersPage() {
         </div>
       </Card>
 
+      {/* Add Agent Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-200">
+          <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl">
             <div className="bg-slate-900 p-4 text-white flex justify-between items-center">
               <h3 className="font-bold text-lg">Onboard New Agent</h3>
               <button onClick={() => setShowAddModal(false)} className="text-gray-400 hover:text-white"><X className="h-6 w-6" /></button>
             </div>
-            
             <form onSubmit={handleAddUser} className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -230,17 +247,14 @@ export default function UsersPage() {
                   <input type="text" required value={newUserCode} onChange={e => setNewUserCode(e.target.value)} className="w-full border rounded-lg px-3 py-2" placeholder="EMP123" />
                 </div>
               </div>
-
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Email Address</label>
                 <input type="email" required value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} className="w-full border rounded-lg px-3 py-2" placeholder="agent@company.com" />
               </div>
-
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Initial Password</label>
                 <input type="text" required value={newUserPassword} onChange={e => setNewUserPassword(e.target.value)} className="w-full border rounded-lg px-3 py-2" placeholder="Assign a secure password" />
               </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">System Role</label>
@@ -260,7 +274,6 @@ export default function UsersPage() {
                   </select>
                 </div>
               </div>
-
               <div className="pt-4 flex justify-end gap-3">
                 <Button type="button" variant="outline" onClick={() => setShowAddModal(false)}>Cancel</Button>
                 <Button type="submit" disabled={isLoading}>{isLoading ? 'Saving...' : 'Create Agent Account'}</Button>
@@ -270,35 +283,33 @@ export default function UsersPage() {
         </div>
       )}
 
+      {/* Edit Agent Modal */}
       {showEditModal && editingUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-200">
+          <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl">
             <div className="bg-slate-900 p-4 text-white flex justify-between items-center">
               <h3 className="font-bold text-lg">Edit Agent Profile</h3>
               <button onClick={() => setShowEditModal(false)} className="text-gray-400 hover:text-white"><X className="h-6 w-6" /></button>
             </div>
-            
             <form onSubmit={handleEditSubmit} className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Full Name</label>
-                  <input type="text" required value={editingUser.full_name || ''} onChange={e => setEditingUser({...editingUser, full_name: e.target.value})} className="w-full border rounded-lg px-3 py-2" />
+                  <input type="text" required value={editingUser.full_name || ''} onChange={e => setEditingUser({ ...editingUser, full_name: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Employee Code</label>
-                  <input type="text" required value={editingUser.employee_code || ''} onChange={e => setEditingUser({...editingUser, employee_code: e.target.value})} className="w-full border rounded-lg px-3 py-2" />
+                  <input type="text" required value={editingUser.employee_code || ''} onChange={e => setEditingUser({ ...editingUser, employee_code: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
                 </div>
               </div>
-
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Email Address</label>
-                <input type="email" required value={editingUser.email || ''} onChange={e => setEditingUser({...editingUser, email: e.target.value})} className="w-full border rounded-lg px-3 py-2" />
+                <input type="email" required value={editingUser.email || ''} onChange={e => setEditingUser({ ...editingUser, email: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
               </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Role</label>
-                  <select value={editingUser.role || ''} onChange={e => setEditingUser({...editingUser, role: e.target.value})} className="w-full border rounded-lg px-3 py-2 bg-white">
+                  <select value={editingUser.role || ''} onChange={e => setEditingUser({ ...editingUser, role: e.target.value })} className="w-full border rounded-lg px-3 py-2 bg-white">
                     <option value="field_agent">Field Agent</option>
                     <option value="team_leader">Team Leader</option>
                     <option value="manager">Manager</option>
@@ -307,7 +318,7 @@ export default function UsersPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Department</label>
-                  <select value={editingUser.department || ''} onChange={e => setEditingUser({...editingUser, department: e.target.value})} className="w-full border rounded-lg px-3 py-2 bg-white">
+                  <select value={editingUser.department || ''} onChange={e => setEditingUser({ ...editingUser, department: e.target.value })} className="w-full border rounded-lg px-3 py-2 bg-white">
                     <option value="Sales">Sales</option>
                     <option value="Operations">Operations</option>
                     <option value="Service">Service</option>
@@ -315,7 +326,6 @@ export default function UsersPage() {
                   </select>
                 </div>
               </div>
-
               <div className="pt-4 flex justify-end gap-3">
                 <Button type="button" variant="outline" onClick={() => setShowEditModal(false)}>Cancel</Button>
                 <Button type="submit" disabled={isLoading}>{isLoading ? 'Saving...' : 'Update Agent'}</Button>
