@@ -165,6 +165,41 @@ function FieldAgentDashboard({ user }: { user: any }) {
     };
   }, []);
 
+  // SCREEN WAKE LOCK API (Web-based alternative to keep GPS alive)
+  // This forces the phone screen to stay awake while a trip is active so the browser doesn't kill the GPS thread
+  useEffect(() => {
+    let wakeLock: any = null;
+
+    const requestWakeLock = async () => {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLock = await (navigator as any).wakeLock.request('screen');
+          console.log('Screen Wake Lock acquired: Phone will not sleep');
+        }
+      } catch (err) {
+        console.error(`Wake Lock error: ${err}`);
+      }
+    };
+
+    if (tripActive) {
+      requestWakeLock();
+      
+      const handleVisibilityChange = () => {
+        if (wakeLock !== null && document.visibilityState === 'visible') {
+          requestWakeLock();
+        }
+      };
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+
+      return () => {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        if (wakeLock !== null) {
+          wakeLock.release().then(() => { wakeLock = null; }).catch(()=>{});
+        }
+      };
+    }
+  }, [tripActive]);
+
   // ADAPTIVE BACKGROUND GPS ENGINE (NATIVE & WEB FALLBACK)
   useEffect(() => {
     if (!tripActive) return;
