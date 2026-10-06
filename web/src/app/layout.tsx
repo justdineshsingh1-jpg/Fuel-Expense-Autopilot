@@ -20,6 +20,15 @@ export default function RootLayout({
       <body className={inter.className}>
         {children}
         <Toaster position="top-right" />
+        <script dangerouslySetInnerHTML={{ __html: `
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function(registrations) {
+              for(let registration of registrations) {
+                registration.unregister();
+              }
+            });
+          }
+        `}} />
       </body>
     </html>
   );

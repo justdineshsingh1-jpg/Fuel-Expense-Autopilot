@@ -66,19 +66,19 @@ export default function LoginPage() {
       return;
     }
     
-    const promise = fetch(`${API_URL}/auth/forgot-password`, {
+    const promise = fetch('/api/users/forgot-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email })
-    }).then(res => {
+    }).then(async res => {
       if (!res.ok) throw new Error();
-      return res;
+      return res.json();
     });
 
     toast.promise(promise, {
-      loading: 'Sending reset email...',
-      success: 'Reset email sent! Please check your inbox.',
-      error: 'Failed to send reset email.'
+      loading: 'Resetting password...',
+      success: 'Password has been reset to: password123 (Please login and change it in your Profile)',
+      error: 'Failed to reset password.'
     });
   };
 
