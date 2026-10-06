@@ -618,7 +618,7 @@ function FieldAgentDashboard({ user }: { user: any }) {
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
         <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
-          <FileText className="h-5 w-5 text-primary" /> Today's Activity
+          <FileText className="h-5 w-5 text-primary" /> Today&apos;s Activity
         </h3>
         {todayActivity.status === 'pending' ? (
           <div className="text-center py-6 text-gray-400">
@@ -806,20 +806,20 @@ function FieldAgentDashboard({ user }: { user: any }) {
 
 export default function Dashboard() {
   const { user } = useAuthStore();
-
-  if (user?.role === 'field_agent') {
-    return <FieldAgentDashboard user={user} />;
-  }
-
   const [adminTrips, setAdminTrips] = useState<any[]>([]);
+
   useEffect(() => {
-    if (user?.role !== 'field_agent') {
+    if (user && user.role !== 'field_agent') {
       fetch('/api/trips', { cache: 'no-store' })
         .then(r => r.json())
         .then(data => { if (Array.isArray(data)) setAdminTrips(data); })
         .catch(console.error);
     }
   }, [user]);
+
+  if (user?.role === 'field_agent') {
+    return <FieldAgentDashboard user={user} />;
+  }
 
   // Compute Live Metrics
   const totalExpense = adminTrips.reduce((sum, t) => sum + (Number(t.fuel_amount) || 0) + (Number(t.misc_amount) || 0), 0);

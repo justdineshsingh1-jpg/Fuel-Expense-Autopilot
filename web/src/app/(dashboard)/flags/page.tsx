@@ -92,7 +92,7 @@ export default function FlagsPage() {
                   {flag.executiveExplanation && (
                     <div className="bg-gray-50 p-3 rounded-md border border-gray-200">
                       <p className="text-xs font-semibold text-gray-500 mb-1">EXECUTIVE EXPLANATION</p>
-                      <p className="text-sm text-gray-700 italic">"{flag.executiveExplanation}"</p>
+                      <p className="text-sm text-gray-700 italic">&quot;{flag.executiveExplanation}&quot;</p>
                     </div>
                   )}
                 </div>

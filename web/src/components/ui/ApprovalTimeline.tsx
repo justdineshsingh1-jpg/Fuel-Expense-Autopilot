@@ -43,7 +43,7 @@ export function ApprovalTimeline({ history }: ApprovalTimelineProps) {
                     </p>
                     {event.comments && (
                       <p className="mt-2 text-sm text-gray-600 bg-gray-50 p-2 rounded-md border border-gray-100">
-                        "{event.comments}"
+                        &quot;{event.comments}&quot;
                       </p>
                     )}
                   </div>
