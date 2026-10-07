@@ -24,7 +24,7 @@ export default function RouteMap({ waypoints, distanceKm }: { waypoints: {lat: n
     <MapContainer center={center} zoom={13} style={{ height: '100%', width: '100%', borderRadius: '0.75rem', zIndex: 1 }}>
       <TileLayer
         attribution='&copy; Google'
-        url="https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}"
+        url="https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"
       />
             <Polyline positions={positions} color="#0ea5e9" weight={5} opacity={0.8}>
         {distanceKm !== undefined && <Popup>Total Distance: {distanceKm} KM</Popup>}
