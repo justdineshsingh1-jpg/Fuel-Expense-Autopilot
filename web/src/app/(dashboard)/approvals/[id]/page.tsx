@@ -206,7 +206,7 @@ export default function ApprovalDetailPage() {
             <CardBody className="p-4">
               <div className="bg-gray-100 rounded-md h-64 mb-4 border border-gray-200 overflow-hidden relative z-0">
                 {waypoints.length > 0 ? (
-                  <RouteMap waypoints={waypoints} />
+                  <RouteMap waypoints={waypoints} distanceKm={trip?.osrm_calculated_km || trip?.distance_km} />
                 ) : (
                   <div className="h-full flex flex-col items-center justify-center text-gray-500">
                     <MapPin className="h-8 w-8 text-gray-400 mb-2" />

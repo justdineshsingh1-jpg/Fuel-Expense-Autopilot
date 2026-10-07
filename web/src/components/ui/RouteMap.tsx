@@ -12,7 +12,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
-export default function RouteMap({ waypoints }: { waypoints: {lat: number, lng: number, timestamp: string}[] }) {
+export default function RouteMap({ waypoints, distanceKm }: { waypoints: {lat: number, lng: number, timestamp: string}[], distanceKm?: number }) {
   if (!waypoints || waypoints.length === 0) {
     return <div className="h-full w-full flex items-center justify-center bg-gray-100 text-gray-500 rounded-xl">No GPS data available</div>;
   }
@@ -26,7 +26,9 @@ export default function RouteMap({ waypoints }: { waypoints: {lat: number, lng: 
         attribution='&copy; Google'
         url="https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}"
       />
-      <Polyline positions={positions} color="#0ea5e9" weight={5} opacity={0.8} />
+            <Polyline positions={positions} color="#0ea5e9" weight={5} opacity={0.8}>
+        {distanceKm !== undefined && <Popup>Total Distance: {distanceKm} KM</Popup>}
+      </Polyline>
       
       {/* Start Marker */}
       <Marker position={positions[0]}>
