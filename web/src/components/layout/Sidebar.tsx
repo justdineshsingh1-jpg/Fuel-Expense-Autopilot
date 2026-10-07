@@ -22,6 +22,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const { user } = useAuthStore();
   const { sidebarOpen, toggleSidebar } = useUIStore();
+  const closeSidebar = () => { if (sidebarOpen) toggleSidebar(); };
 
   if (!user) return null;
 
@@ -85,6 +86,7 @@ export function Sidebar() {
           return (
             <Link
               key={item.name}
+              onClick={closeSidebar}
               href={item.href}
               className={cn(
                 "group flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors",
@@ -101,7 +103,7 @@ export function Sidebar() {
       </nav>
 
       <div className="p-4 bg-slate-950/50 mt-auto">
-        <Link href="/profile" className="flex items-center gap-3 hover:bg-slate-800 p-2 rounded-md transition-colors cursor-pointer">
+        <Link href="/profile" onClick={closeSidebar} className="flex items-center gap-3 hover:bg-slate-800 p-2 rounded-md transition-colors cursor-pointer">
           <div className="h-10 w-10 rounded-full bg-slate-700 flex items-center justify-center font-bold text-white uppercase shrink-0">
             {user.name.charAt(0)}
           </div>
