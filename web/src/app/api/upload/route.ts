@@ -10,18 +10,18 @@ export async function POST(request: Request) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    const fileName = \_\;
+    const fileName = `${Date.now()}_${file.name}`;
     
     const { data, error } = await supabaseAdmin.storage
       .from('fuel-receipts')
-      .upload(uploads/\, buffer, {
+      .upload(`uploads/${fileName}`, buffer, {
         contentType: file.type,
         upsert: false
       });
 
     if (error) throw error;
 
-    const { data: publicUrlData } = supabaseAdmin.storage.from('fuel-receipts').getPublicUrl(uploads/\);
+    const { data: publicUrlData } = supabaseAdmin.storage.from('fuel-receipts').getPublicUrl(`uploads/${fileName}`);
 
     return NextResponse.json({ url: publicUrlData.publicUrl });
   } catch (e: any) {

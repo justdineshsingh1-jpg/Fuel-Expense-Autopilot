@@ -9,10 +9,10 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { FileSpreadsheet } from 'lucide-react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { supabaseAdmin as supabase } from '@/lib/supabaseAdmin';
 
 export default function ExecutiveSummaryPage() {
-  const supabase = createClientComponentClient();
+  
   const [data, setData] = useState({
     totalPending: 0,
     totalValue: 0,

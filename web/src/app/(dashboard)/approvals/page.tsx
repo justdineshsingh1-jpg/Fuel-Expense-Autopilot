@@ -19,7 +19,7 @@ import {
   ChevronDown, ChevronUp, Search, CheckCircle, XCircle, 
   CornerUpLeft, Flag, MapPin, Camera, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { supabaseAdmin as supabase } from '@/lib/supabaseAdmin';
 
 
 // Mock data
@@ -125,7 +125,7 @@ export default function ApprovalsPage() {
     }
   };
 
-  const supabase = createClientComponentClient();
+  
   const handleAction = async (id: string, action: string) => {
     toast.loading(`Applying ${action}...`);
     let newStatus = 'pending';
