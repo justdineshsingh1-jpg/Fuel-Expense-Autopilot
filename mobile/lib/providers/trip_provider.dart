@@ -83,11 +83,12 @@ class TripProvider with ChangeNotifier {
       _currentWaypoints = [];
       
       // Start Background GPS Engine
-      await _locationService.startBackgroundTracking((Position pos, String mode) {
+      await _locationService.startBackgroundTracking((Position pos, String mode, String? address) {
         _currentWaypoints.add({
           'lat': pos.latitude,
           'lng': pos.longitude,
           'mode': mode,
+            if (address != null) 'address': address,
           'timestamp': DateTime.now().toIso8601String(),
           'accuracy': pos.accuracy,
           'speed': pos.speed,
@@ -146,3 +147,4 @@ class TripProvider with ChangeNotifier {
     }
   }
 }
+

@@ -34,7 +34,10 @@ export default function ApprovalDetailPage() {
         const data = await res.json();
         setTrip(data);
         
-        // 2. Fetch waypoints from Supabase Storage
+        // 2. Fetch waypoints (Prefer DB, fallback to Storage)
+        if (data && data.waypoints && data.waypoints.length > 0) {
+          setWaypoints(data.waypoints);
+        } else 
         if (data && data.user_id && data.log_date) {
           const mapUrl = `https://isjsbwjxvpmmgwvvksit.supabase.co/storage/v1/object/public/fuel-receipts/map_history/${data.user_id}_${data.log_date}.json`;
           const mapRes = await fetch(mapUrl);
@@ -176,8 +179,15 @@ export default function ApprovalDetailPage() {
                 </div>
                 {trip.fuel_bill_url && (
                   <div>
-                    <p className="text-sm font-semibold text-gray-700 mb-2">Fuel Bill</p>
+                    <p className="text-sm font-semibold text-gray-700 mb-2">Fuel Bill (₹{trip.fuel_amount})</p>
                     <ImageViewer src={trip.fuel_bill_url} alt="Fuel Bill" className="h-32 w-full object-cover rounded-lg border border-gray-200" />
+                  </div>
+                )}
+                {trip.misc_bill_url && (
+                  <div>
+                    <p className="text-sm font-semibold text-gray-700 mb-2">Misc Bill (₹{trip.misc_amount})</p>
+                    <ImageViewer src={trip.misc_bill_url} alt="Misc Bill" className="h-32 w-full object-cover rounded-lg border border-gray-200" />
+                    <p className="text-xs text-gray-500 mt-1">Remarks: {trip.misc_particulars}</p>
                   </div>
                 )}
               </div>

@@ -19,6 +19,8 @@ import {
   ChevronDown, ChevronUp, Search, CheckCircle, XCircle, 
   CornerUpLeft, Flag, MapPin, Camera, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+
 
 // Mock data
 
@@ -123,8 +125,28 @@ export default function ApprovalsPage() {
     }
   };
 
-  const handleAction = (id: string, action: string) => {
-    toast.success(`Action '${action}' applied to ${id}`);
+  const supabase = createClientComponentClient();
+  const handleAction = async (id: string, action: string) => {
+    toast.loading(`Applying ${action}...`);
+    let newStatus = 'pending';
+    if (action === 'Approve') newStatus = 'approved';
+    if (action === 'Reject') newStatus = 'rejected';
+    if (action === 'Return') newStatus = 'returned';
+    if (action === 'Flag') newStatus = 'flagged';
+
+    const { error } = await supabase
+      .from('trip_logs')
+      .update({ approval_status: newStatus })
+      .eq('id', id);
+
+    toast.dismiss();
+    
+    if (error) {
+      toast.error(`Failed to apply action: ${error.message}`);
+    } else {
+      toast.success(`Trip successfully marked as ${newStatus}`);
+      setTrips(trips.map(t => t.id === id ? { ...t, status: newStatus } : t));
+    }
   };
 
   

@@ -10,8 +10,9 @@ class LocationService {
   DateTime? _modeDebounceStart;
   DateTime? _stationaryStartTime;
   Position? _lastSavedPos;
+  Position? _lastGeocodedPos;
 
-  Future<void> startBackgroundTracking(Function(Position, String) onLocationUpdate) async {
+  Future<void> startBackgroundTracking(Function(Position, String, String?) onLocationUpdate) async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) throw Exception('Location services disabled.');
 
@@ -22,11 +23,14 @@ class LocationService {
     }
     if (permission == LocationPermission.deniedForever) throw Exception('Permissions permanently denied.');
 
+    // Reset geocode tracker on new shift
+    _lastGeocodedPos = null;
+
     // Start with Survey configuration (highest granularity)
     _startStream(10, onLocationUpdate);
   }
 
-  void _startStream(int distanceFilter, Function(Position, String) onLocationUpdate) {
+  void _startStream(int distanceFilter, Function(Position, String, String?) onLocationUpdate) {
     _positionStream?.cancel();
     
     LocationSettings locationSettings = AndroidSettings(
@@ -46,7 +50,7 @@ class LocationService {
     });
   }
 
-  void _processLocation(Position pos, Function(Position, String) onLocationUpdate) {
+  void _processLocation(Position pos, Function(Position, String, String?) onLocationUpdate) {
     // 1. Strict Hardware Filter (accuracy <= 20m)
     if (pos.accuracy > 20.0) return;
 
@@ -86,9 +90,29 @@ class LocationService {
       _modeDebounceStart = null; // Cancel debounce if speed fluctuates back
     }
 
-    // Pass validated point to UI/Provider
     _lastSavedPos = pos;
-    onLocationUpdate(pos, _currentMode);
+
+    // 4. Reverse Geocode Address Check (Trigger every 5 kilometers)
+    double distanceSinceLastGeocode = 99999;
+    if (_lastGeocodedPos != null) {
+      distanceSinceLastGeocode = Geolocator.distanceBetween(
+        _lastGeocodedPos!.latitude, 
+        _lastGeocodedPos!.longitude, 
+        pos.latitude, 
+        pos.longitude
+      );
+    }
+
+    if (distanceSinceLastGeocode >= 5000) { // 5 KM
+      _lastGeocodedPos = pos;
+      getAddressFromLatLng(pos.latitude, pos.longitude).then((address) {
+        onLocationUpdate(pos, _currentMode, address);
+      }).catchError((_) {
+        onLocationUpdate(pos, _currentMode, null);
+      });
+    } else {
+      onLocationUpdate(pos, _currentMode, null);
+    }
   }
 
   void stopTracking() {
@@ -97,6 +121,7 @@ class LocationService {
     _stationaryStartTime = null;
     _modeDebounceStart = null;
     _lastSavedPos = null;
+    _lastGeocodedPos = null;
   }
 
   Future<Position> getCurrentLocation() async {
@@ -110,7 +135,12 @@ class LocationService {
       List<Placemark> placemarks = await placemarkFromCoordinates(lat, lng);
       if (placemarks.isNotEmpty) {
         Placemark place = placemarks[0];
-        return '${place.street}, ${place.subLocality}, ${place.locality}, ${place.postalCode}, ${place.country}';
+        // Clean address formatting (e.g. GS Road, Ganeshguri, Assam)
+        List<String> parts = [];
+        if (place.street != null && place.street!.isNotEmpty) parts.add(place.street!);
+        if (place.subLocality != null && place.subLocality!.isNotEmpty) parts.add(place.subLocality!);
+        if (place.locality != null && place.locality!.isNotEmpty) parts.add(place.locality!);
+        return parts.join(', ');
       }
       return 'Address not found';
     } catch (e) {

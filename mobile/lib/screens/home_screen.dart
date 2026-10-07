@@ -5,6 +5,7 @@ import '../providers/trip_provider.dart';
 import '../utils/permission_utils.dart';
 import '../utils/camera_utils.dart';
 import 'package:intl/intl.dart';
+import 'dart:io';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -93,7 +94,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: capturedImageUrl != null 
-                        ? Image.network(capturedImageUrl!, fit: BoxFit.cover)
+                        ? capturedImageUrl!.startsWith('http') ? Image.network(capturedImageUrl!, fit: BoxFit.cover) : Image.file(File(capturedImageUrl!), fit: BoxFit.cover)
                         : Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: const [
@@ -196,7 +197,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: capturedImageUrl != null 
-                        ? Image.network(capturedImageUrl!, fit: BoxFit.cover)
+                        ? capturedImageUrl!.startsWith('http') ? Image.network(capturedImageUrl!, fit: BoxFit.cover) : Image.file(File(capturedImageUrl!), fit: BoxFit.cover)
                         : Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: const [
@@ -339,7 +340,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: capturedImageUrl != null
-                          ? Image.network(capturedImageUrl!, fit: BoxFit.cover)
+                          ? capturedImageUrl!.startsWith('http') ? Image.network(capturedImageUrl!, fit: BoxFit.cover) : Image.file(File(capturedImageUrl!), fit: BoxFit.cover)
                           : Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: const [
@@ -585,3 +586,4 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
+

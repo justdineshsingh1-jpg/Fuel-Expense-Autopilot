@@ -23,8 +23,8 @@ export default function RouteMap({ waypoints }: { waypoints: {lat: number, lng: 
   return (
     <MapContainer center={center} zoom={13} style={{ height: '100%', width: '100%', borderRadius: '0.75rem', zIndex: 1 }}>
       <TileLayer
-        attribution='&copy; OpenStreetMap contributors'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        attribution='&copy; Google'
+        url="https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}"
       />
       <Polyline positions={positions} color="#0ea5e9" weight={5} opacity={0.8} />
       
