@@ -65,8 +65,8 @@ export function Sidebar() {
 
   return (
     <div className={cn(
-      "fixed inset-y-0 left-0 z-40 w-64 bg-slate-900 text-slate-300 transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 flex flex-col",
-      sidebarOpen ? "translate-x-0" : "-translate-x-full"
+      "fixed inset-y-0 left-0 z-40 bg-slate-900 text-slate-300 transition-all duration-300 ease-in-out lg:static flex flex-col overflow-hidden",
+      sidebarOpen ? "w-64 translate-x-0" : "w-0 -translate-x-full lg:translate-x-0"
     )}>
       <div className="flex h-16 shrink-0 items-center justify-between px-6 bg-slate-950">
         <div className="flex items-center gap-2">
