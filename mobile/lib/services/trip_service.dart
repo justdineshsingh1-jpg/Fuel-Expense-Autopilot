@@ -8,12 +8,15 @@ class TripService {
   final ApiService _apiService = ApiService();
   final OfflineSyncService _syncService = OfflineSyncService();
 
-  Future<List<TripLog>> getTrips() async {
+  Future<List<TripLog>> getTrips({String? userId}) async {
     try {
       // Opportunistic sync on fetch
       await _syncService.syncPendingTrips(_apiService);
 
-      final response = await _apiService.client.get(ApiConfig.trips);
+      final response = await _apiService.client.get(
+        ApiConfig.trips,
+        queryParameters: userId != null && userId.isNotEmpty ? {'user_id': userId} : null,
+      );
       if (response.data != null && response.data is List) {
         return (response.data as List).map((t) => _parseTripLog(t)).toList();
       }

@@ -33,7 +33,6 @@ const ALLOWED_COLUMNS = new Set([
   'survey_cluster_km',
   'variance_percent',
   'fraud_flags',
-  'has_anomalies',
   'approval_status',
   'submitted_at',
   'created_at',
@@ -54,6 +53,7 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
+    const userId = searchParams.get('user_id');
 
     let query = supabaseAdmin
       .from('trip_logs')
@@ -62,6 +62,9 @@ export async function GET(request: Request) {
       
     if (id) {
       query = query.eq('id', id);
+    }
+    if (userId) {
+      query = query.eq('user_id', userId);
     }
 
     const { data, error } = await query;
@@ -286,7 +289,6 @@ export async function POST(request: Request) {
         survey_cluster_km: surveyKm,
         variance_percent: variancePercent,
         fraud_flags: fraudFlags,
-        has_anomalies: fraudFlags.length > 0,
         approval_status: 'pending',
         submitted_at: new Date().toISOString(),
         updated_at: new Date().toISOString()

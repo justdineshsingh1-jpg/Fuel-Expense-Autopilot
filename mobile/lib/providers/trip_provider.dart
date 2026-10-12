@@ -91,11 +91,15 @@ class TripProvider with ChangeNotifier {
     _isLoading = true;
     notifyListeners();
     try {
-      _trips = await _tripService.getTrips();
+      final currentUserId = _authProvider?.user?.id;
+      _trips = await _tripService.getTrips(userId: currentUserId);
       
-      // RESTORE ACTIVE TRIP STATE ON APP RESTART OR RELOAD
+      // RESTORE ACTIVE TRIP STATE ON APP RESTART OR RELOAD FOR CURRENT USER ONLY
       try {
-        final activeTrip = _trips.firstWhere((t) => t.status.toLowerCase() == 'active');
+        final activeTrip = _trips.firstWhere(
+          (t) => t.status.toLowerCase() == 'active' && 
+                 (currentUserId == null || currentUserId.isEmpty || t.employeeId == currentUserId),
+        );
         _isTripActive = true;
         _activeTripId = activeTrip.id;
         _startReading = activeTrip.startReading.toString();
