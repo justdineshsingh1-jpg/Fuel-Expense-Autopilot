@@ -7,3 +7,5 @@ build/
 .idea/
 .vs/
 .vercel
+.next/
+*.tsbuildinfo
