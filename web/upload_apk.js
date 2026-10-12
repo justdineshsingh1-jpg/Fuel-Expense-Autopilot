@@ -14,10 +14,12 @@ async function upload() {
     }
 
     const fileBuffer = fs.readFileSync(apkPath);
+    const version = Math.floor(Date.now() / 1000);
+    const filename = `FuelApp_v${version}.apk`;
     
     const { data, error } = await supabase.storage
         .from('apks')
-        .upload('FuelApp.apk', fileBuffer, {
+        .upload(filename, fileBuffer, {
             contentType: 'application/vnd.android.package-archive',
             upsert: true
         });
@@ -27,7 +29,7 @@ async function upload() {
         process.exit(1);
     }
 
-    const { data: publicUrlData } = supabase.storage.from('apks').getPublicUrl('FuelApp.apk');
+    const { data: publicUrlData } = supabase.storage.from('apks').getPublicUrl(filename);
     console.log('\n========================================================');
     console.log('UPLOAD SUCCESSFUL!');
     console.log('Here is your permanent instant-download link:');

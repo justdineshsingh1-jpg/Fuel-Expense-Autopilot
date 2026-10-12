@@ -1,9 +1,8 @@
 import '../models/trip_log.dart';
+import '../models/fuel_bill.dart';
 import 'api_service.dart';
 import 'offline_sync_service.dart';
 import '../config/api_config.dart';
-import 'package:dio/dio.dart';
-import 'dart:io';
 
 class TripService {
   final ApiService _apiService = ApiService();
@@ -15,20 +14,8 @@ class TripService {
       await _syncService.syncPendingTrips(_apiService);
 
       final response = await _apiService.client.get(ApiConfig.trips);
-      if (response.data != null) {
-        return (response.data as List).map((t) => TripLog(
-          id: t['id'],
-          employeeId: t['user_id'] ?? '',
-          date: DateTime.tryParse(t['created_at'] ?? '') ?? DateTime.now(),
-          startReading: double.tryParse(t['start_reading']?.toString() ?? '') ?? 0.0,
-          startOdometerImageUrl: t['start_odometer_image_url'] ?? '',
-          endReading: double.tryParse(t['end_reading']?.toString() ?? '') ?? 0.0,
-          endOdometerImageUrl: t['end_odometer_image_url'] ?? '',
-          distanceKm: t['distance_km']?.toDouble() ?? 0.0,
-          locations: [], 
-          status: t['approval_status'] ?? 'pending',
-          flags: [],
-        )).toList();
+      if (response.data != null && response.data is List) {
+        return (response.data as List).map((t) => _parseTripLog(t)).toList();
       }
       return [];
     } catch (e) {
@@ -64,27 +51,63 @@ class TripService {
         startOdometerImageUrl: payload['start_odometer_image_url'] ?? '',
         endReading: double.tryParse(payload['end_reading']?.toString() ?? '') ?? 0.0,
         endOdometerImageUrl: payload['end_odometer_image_url'] ?? '',
-        distanceKm: 0.0,
+        distanceKm: double.tryParse(payload['distance_km']?.toString() ?? '') ?? 0.0,
         locations: [],
-        status: 'queued',
+        fuelBill: (payload['fuel_amount'] != null && (double.tryParse(payload['fuel_amount'].toString()) ?? 0) > 0)
+            ? FuelBill(
+                amount: double.tryParse(payload['fuel_amount'].toString()) ?? 0,
+                imageUrl: payload['fuel_bill_url'] ?? '',
+                fuelType: 'Petrol',
+                remarks: '',
+              )
+            : null,
+        miscAmount: double.tryParse(payload['misc_amount']?.toString() ?? '') ?? 0.0,
+        miscBillUrl: payload['misc_bill_url'],
+        miscRemarks: payload['misc_particulars'] ?? '',
+        status: payload['approval_status'] ?? 'pending',
         flags: [],
       );
     }
   }
 
   TripLog _parseTripLog(Map<String, dynamic> t) {
+    FuelBill? parsedFuelBill;
+    final fuelAmt = double.tryParse(t['fuel_amount']?.toString() ?? '') ?? 0.0;
+    final fuelUrl = t['fuel_bill_url']?.toString();
+    if (fuelAmt > 0 && fuelUrl != null && fuelUrl.isNotEmpty) {
+      double? ocrAmt;
+      if (t['ocr_data'] != null && t['ocr_data']['detected_amount'] != null) {
+        ocrAmt = double.tryParse(t['ocr_data']['detected_amount'].toString());
+      }
+      parsedFuelBill = FuelBill(
+        amount: fuelAmt,
+        imageUrl: fuelUrl,
+        fuelType: 'Petrol',
+        remarks: '',
+        ocrAmount: ocrAmt,
+      );
+    }
+
+    final miscAmt = double.tryParse(t['misc_amount']?.toString() ?? '') ?? 0.0;
+    final miscUrl = t['misc_bill_url']?.toString();
+    final miscRemarks = t['misc_particulars']?.toString() ?? '';
+
     return TripLog(
-        id: t['id'],
-        employeeId: t['user_id'] ?? '',
-        date: DateTime.tryParse(t['created_at'] ?? '') ?? DateTime.now(),
-        startReading: double.tryParse(t['start_reading']?.toString() ?? '') ?? 0.0,
-        startOdometerImageUrl: t['start_odometer_image_url'] ?? '',
-        endReading: double.tryParse(t['end_reading']?.toString() ?? '') ?? 0.0,
-        endOdometerImageUrl: t['end_odometer_image_url'] ?? '',
-        distanceKm: t['distance_km']?.toDouble() ?? 0.0,
-        locations: [],
-        status: t['approval_status'] ?? 'pending',
-        flags: [],
+      id: t['id']?.toString(),
+      employeeId: t['user_id'] ?? '',
+      date: DateTime.tryParse(t['created_at'] ?? '') ?? DateTime.now(),
+      startReading: double.tryParse(t['start_reading']?.toString() ?? '') ?? 0.0,
+      startOdometerImageUrl: t['start_odometer_image_url'] ?? '',
+      endReading: double.tryParse(t['end_reading']?.toString() ?? '') ?? 0.0,
+      endOdometerImageUrl: t['end_odometer_image_url'] ?? '',
+      distanceKm: double.tryParse(t['distance_km']?.toString() ?? '') ?? 0.0,
+      locations: [],
+      fuelBill: parsedFuelBill,
+      miscAmount: miscAmt,
+      miscBillUrl: (miscUrl != null && miscUrl.isNotEmpty) ? miscUrl : null,
+      miscRemarks: miscRemarks,
+      status: t['approval_status'] ?? 'pending',
+      flags: [],
     );
   }
 }

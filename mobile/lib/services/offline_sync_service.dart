@@ -54,23 +54,24 @@ class OfflineSyncService {
     
     for (String field in fields) {
       if (payload[field] != null && payload[field].toString().isNotEmpty) {
-        String path = payload[field];
-        if (!path.startsWith('http')) {
-          // It's a local file path! Upload it.
-          File file = File(path);
-          if (await file.exists()) {
-            var formData = FormData.fromMap({
-              'file': await MultipartFile.fromFile(file.path, filename: 'upload.jpg')
-            });
-            var response = await apiService.client.post(
-              ApiConfig.baseUrl.replaceAll('/api', '') + '/api/upload', 
-              data: formData
-            );
-            if (response.statusCode == 200 && response.data['url'] != null) {
-              payload[field] = response.data['url'];
-              // Delete local file after successful upload to save space
-              try { await file.delete(); } catch (_) {}
+        String path = payload[field].toString();
+        if (!path.startsWith('http://') && !path.startsWith('https://')) {
+          try {
+            File file = File(path);
+            if (await file.exists()) {
+              var formData = FormData.fromMap({
+                'file': await MultipartFile.fromFile(file.path, filename: 'upload.jpg')
+              });
+              var response = await apiService.client.post(
+                '/upload', 
+                data: formData
+              );
+              if (response.statusCode == 200 && response.data != null && response.data['url'] != null) {
+                payload[field] = response.data['url'];
+              }
             }
+          } catch (e) {
+            print("Image upload failed for field $field: $e");
           }
         }
       }

@@ -6,6 +6,8 @@ import '../utils/permission_utils.dart';
 import '../utils/camera_utils.dart';
 import 'package:intl/intl.dart';
 import 'dart:io';
+import 'trip_history_screen.dart';
+import 'profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -116,11 +118,22 @@ class _HomeScreenState extends State<HomeScreen> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
                       onPressed: () async {
-                        if (_odometerController.text.isEmpty || capturedImageUrl == null) return;
+                        if (_odometerController.text.trim().isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter starting odometer reading.')));
+                          return;
+                        }
+                        if (capturedImageUrl == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please capture dashboard photo.')));
+                          return;
+                        }
+                        final reading = _odometerController.text.trim();
+                        final img = capturedImageUrl!;
+                        _odometerController.clear();
                         Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Starting shift...')));
                         await Provider.of<TripProvider>(context, listen: false).startTrip(
-                          _odometerController.text,
-                          capturedImageUrl!,
+                          reading,
+                          img,
                         );
                       },
                       child: const Text('Confirm & Submit', style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold)),
@@ -218,15 +231,30 @@ class _HomeScreenState extends State<HomeScreen> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
                       onPressed: () async {
-                        if (endOdoController.text.isEmpty || capturedImageUrl == null) return;
+                        if (endOdoController.text.trim().isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter end odometer reading.')));
+                          return;
+                        }
+                        if (capturedImageUrl == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please capture end dashboard photo.')));
+                          return;
+                        }
+                        final reading = endOdoController.text.trim();
+                        final img = capturedImageUrl!;
                         Navigator.pop(ctx);
-                        await Provider.of<TripProvider>(context, listen: false).endTrip(
-                          endOdoController.text,
-                          capturedImageUrl!,
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ending shift and saving all data...')));
+                        final ok = await Provider.of<TripProvider>(context, listen: false).endTrip(
+                          reading,
+                          img,
                           0.0,
                           0.0,
                           'Ended via app'
                         );
+                        if (ok) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Shift ended successfully! All data recorded.')));
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Shift saved to local queue.')));
+                        }
                       },
                       child: const Text('Confirm & End Trip', style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold)),
                     ),
@@ -395,13 +423,63 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            DrawerHeader(
+              decoration: const BoxDecoration(color: Color(0xFF0F172A)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  const CircleAvatar(
+                    backgroundColor: Colors.blue,
+                    radius: 30,
+                    child: Icon(Icons.person, size: 35, color: Colors.white),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(user?.fullName ?? 'Agent', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text(user?.email ?? '', style: const TextStyle(color: Colors.white70, fontSize: 14)),
+                ],
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.home),
+              title: const Text('Home'),
+              onTap: () => Navigator.pop(context),
+            ),
+            ListTile(
+              leading: const Icon(Icons.history),
+              title: const Text('My History'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const TripHistoryScreen()));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.person),
+              title: const Text('Profile & Settings'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen()));
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.logout, color: Colors.red),
+              title: const Text('Logout', style: TextStyle(color: Colors.red)),
+              onTap: () {
+                Provider.of<AuthProvider>(context, listen: false).logout();
+              },
+            ),
+          ],
+        ),
+      ),
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Colors.white,
-        leading: IconButton(
-          icon: const Icon(Icons.menu, color: Colors.black),
-          onPressed: () {},
-        ),
+        iconTheme: const IconThemeData(color: Colors.black),
         actions: [
           IconButton(
             icon: const Icon(Icons.notifications_none, color: Colors.black),
@@ -574,9 +652,64 @@ class _HomeScreenState extends State<HomeScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text('Starting Odometer', style: TextStyle(color: Colors.grey)),
-                        Text('${tripProvider.startReading} KM', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      ],
-                    ),
+                          Text('${tripProvider.startReading} KM', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      const Divider(height: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Live Distance', style: TextStyle(color: Colors.grey)),
+                          Text('${tripProvider.liveDistance.toStringAsFixed(2)} KM', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.location_on, color: Colors.red, size: 16),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              tripProvider.currentAddress,
+                              style: const TextStyle(color: Colors.black87, fontSize: 13),
+                            ),
+                          ),
+                        ],
+                      ),
+                    if (tripProvider.fuelAmount > 0 || tripProvider.miscAmount > 0) ...[
+                      const Divider(height: 24),
+                      Row(
+                        children: const [
+                          Icon(Icons.receipt_long, color: Colors.green, size: 18),
+                          SizedBox(width: 8),
+                          Text('Logged Expenses Today', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      if (tripProvider.fuelAmount > 0)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Fuel / Petrol', style: TextStyle(color: Colors.grey)),
+                              Text('₹${tripProvider.fuelAmount}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+                            ],
+                          ),
+                        ),
+                      if (tripProvider.miscAmount > 0)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Misc Expenses', style: TextStyle(color: Colors.grey)),
+                              Text('₹${tripProvider.miscAmount}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+                            ],
+                          ),
+                        ),
+                    ],
                   ],
                 ),
               ),

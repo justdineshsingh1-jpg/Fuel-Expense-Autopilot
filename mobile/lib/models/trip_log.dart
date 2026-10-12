@@ -15,6 +15,9 @@ class TripLog {
   final double distanceKm;
   final List<TripLocation> locations;
   final FuelBill? fuelBill;
+  final double miscAmount;
+  final String? miscBillUrl;
+  final String miscRemarks;
   final String status; // 'Draft', 'Pending', 'Approved', 'Rejected', 'Flagged'
   final List<FraudFlag> flags;
 
@@ -31,6 +34,9 @@ class TripLog {
     required this.distanceKm,
     required this.locations,
     this.fuelBill,
+    this.miscAmount = 0.0,
+    this.miscBillUrl,
+    this.miscRemarks = '',
     required this.status,
     required this.flags,
   });
@@ -49,6 +55,9 @@ class TripLog {
       distanceKm: (json['distanceKm'] as num).toDouble(),
       locations: (json['locations'] as List<dynamic>?)?.map((e) => TripLocation.fromJson(e as Map<String, dynamic>)).toList() ?? [],
       fuelBill: json['fuelBill'] != null ? FuelBill.fromJson(json['fuelBill'] as Map<String, dynamic>) : null,
+      miscAmount: json['miscAmount'] != null ? (json['miscAmount'] as num).toDouble() : 0.0,
+      miscBillUrl: json['miscBillUrl'] as String?,
+      miscRemarks: json['miscRemarks'] as String? ?? '',
       status: json['status'] as String,
       flags: (json['flags'] as List<dynamic>?)?.map((e) => FraudFlag.fromJson(e as Map<String, dynamic>)).toList() ?? [],
     );
@@ -68,6 +77,9 @@ class TripLog {
       'distanceKm': distanceKm,
       'locations': locations.map((e) => e.toJson()).toList(),
       'fuelBill': fuelBill?.toJson(),
+      'miscAmount': miscAmount,
+      'miscBillUrl': miscBillUrl,
+      'miscRemarks': miscRemarks,
       'status': status,
       'flags': flags.map((e) => e.toJson()).toList(),
     };

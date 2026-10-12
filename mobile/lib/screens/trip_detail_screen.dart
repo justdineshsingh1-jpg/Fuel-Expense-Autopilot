@@ -12,6 +12,8 @@ class TripDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool isActive = trip.status.toLowerCase() == 'active';
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Trip Details'),
@@ -59,9 +61,9 @@ class TripDetailScreen extends StatelessWidget {
                     children: [
                       const Text('Start', style: TextStyle(fontWeight: FontWeight.bold)),
                       const SizedBox(height: 4),
-                      PhotoThumbnail(path: trip.startOdometerImageUrl, isNetwork: true),
+                      PhotoThumbnail(path: trip.startOdometerImageUrl),
                       const SizedBox(height: 4),
-                      Text('${trip.startReading} KM'),
+                      Text('${trip.startReading} KM', style: const TextStyle(fontWeight: FontWeight.bold)),
                     ],
                   ),
                 ),
@@ -70,9 +72,14 @@ class TripDetailScreen extends StatelessWidget {
                     children: [
                       const Text('End', style: TextStyle(fontWeight: FontWeight.bold)),
                       const SizedBox(height: 4),
-                      PhotoThumbnail(path: trip.endOdometerImageUrl, isNetwork: true),
-                      const SizedBox(height: 4),
-                      Text('${trip.endReading} KM'),
+                      if (isActive) ...[
+                        const SizedBox(height: 30),
+                        const Text('Shift Active', style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)),
+                      ] else ...[
+                        PhotoThumbnail(path: trip.endOdometerImageUrl),
+                        const SizedBox(height: 4),
+                        Text('${trip.endReading} KM', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      ],
                     ],
                   ),
                 ),
@@ -81,13 +88,15 @@ class TripDetailScreen extends StatelessWidget {
             const SizedBox(height: 12),
             Center(
               child: Text(
-                'Total Distance: ${trip.distanceKm.toStringAsFixed(1)} KM',
+                isActive
+                  ? 'Total Distance: Live tracking...'
+                  : 'Total Distance: ${trip.distanceKm.toStringAsFixed(1)} KM',
                 style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ),
             const Divider(height: 32),
 
-            // Locations Section
+            // Client Visits Section
             const Text('Client Visits', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             if (trip.locations.isEmpty) const Text('No locations recorded.'),
@@ -104,13 +113,28 @@ class TripDetailScreen extends StatelessWidget {
             const Divider(height: 32),
 
             // Fuel Bills
-            if (trip.fuelBill != null) ...[
+            if (trip.fuelBill != null && trip.fuelBill!.amount > 0) ...[
               const Text('Fuel Bill', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               ListTile(
-                leading: PhotoThumbnail(path: trip.fuelBill!.imageUrl, isNetwork: true, size: 60),
-                title: Text('Amount: ₹${trip.fuelBill!.amount}'),
-                subtitle: Text('OCR Detected: ₹${trip.fuelBill!.ocrAmount ?? 'N/A'}\nType: ${trip.fuelBill!.fuelType}'),
+                leading: PhotoThumbnail(path: trip.fuelBill!.imageUrl, size: 60),
+                title: Text('Amount: ₹${trip.fuelBill!.amount}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text("OCR Detected: ₹${trip.fuelBill!.ocrAmount ?? 'N/A'}\nType: ${trip.fuelBill!.fuelType}"),
+                isThreeLine: true,
+              ),
+              const Divider(height: 32),
+            ],
+
+            // Misc Bills
+            if (trip.miscAmount > 0) ...[
+              const Text('Misc Bill', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              ListTile(
+                leading: (trip.miscBillUrl != null && trip.miscBillUrl!.isNotEmpty)
+                    ? PhotoThumbnail(path: trip.miscBillUrl!, size: 60)
+                    : null,
+                title: Text('Amount: ₹${trip.miscAmount}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text(trip.miscRemarks.isNotEmpty ? 'Remarks: ${trip.miscRemarks}' : 'General expense'),
                 isThreeLine: true,
               ),
               const Divider(height: 32),
