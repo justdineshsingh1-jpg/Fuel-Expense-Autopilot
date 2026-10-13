@@ -76,6 +76,14 @@ class TripProvider with ChangeNotifier {
     }
   }
 
+  Future<void> init(AuthProvider auth) async {
+    _authProvider = auth;
+    await _restoreActiveTripLocally();
+    if (auth.isAuthenticated) {
+      loadTrips();
+    }
+  }
+
   Future<bool> _restoreActiveTripLocally() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -83,12 +91,6 @@ class TripProvider with ChangeNotifier {
       if (str == null || str.isEmpty) return false;
 
       final data = jsonDecode(str);
-      final currentUserId = _authProvider?.user?.id;
-      // Ensure the saved trip belongs to the current user
-      if (currentUserId != null && currentUserId.isNotEmpty && data['userId'] != currentUserId) {
-        return false;
-      }
-
       if (data['isTripActive'] == true) {
         _isTripActive = true;
         _activeTripId = data['activeTripId'];
@@ -151,55 +153,59 @@ class TripProvider with ChangeNotifier {
   }
 
   Future<bool> addExpense(String type, double amount, String remarks, String imageUrl) async {
-    if (type.toLowerCase().contains('fuel') || type.toLowerCase().contains('petrol')) {
-      _fuelAmount += amount;
-      _fuelBillUrl = imageUrl;
-    } else {
-      _miscAmount += amount;
-      _miscRemarks += '$type: $remarks ($amount) | ';
-      _miscBillUrl = imageUrl;
-    }
-    
-    // Save locally IMMEDIATELY so app closure never loses the expense
-    await _saveActiveTripLocally();
-    notifyListeners();
-    
-    // Sync to backend in background
-    if (_isTripActive && _activeTripId != null) {
-      try {
-        final payload = {
-          'trip_id': _activeTripId,
-          'user_id': _authProvider?.user?.id ?? '',
-          'approval_status': 'active',
-          'fuel_amount': _fuelAmount,
-          'fuel_bill_url': _fuelBillUrl,
-          'misc_amount': _miscAmount,
-          'misc_bill_url': _miscBillUrl,
-          'misc_particulars': _miscRemarks,
-        };
-        await _tripService.saveTrip(payload);
-        return true;
-      } catch (e) {
-        debugPrint("addExpense backend sync deferred: $e");
-        // Still return true because it is safely persisted locally and in offline queue!
-        return true;
+    try {
+      if (type.toLowerCase().contains('fuel') || type.toLowerCase().contains('petrol')) {
+        _fuelAmount += amount;
+        _fuelBillUrl = imageUrl;
+      } else {
+        _miscAmount += amount;
+        _miscRemarks += '$type: $remarks ($amount) | ';
+        _miscBillUrl = imageUrl;
       }
+      
+      // Save locally IMMEDIATELY so app closure never loses the expense
+      await _saveActiveTripLocally();
+      notifyListeners();
+      
+      // Sync to backend in background
+      if (_isTripActive && _activeTripId != null) {
+        try {
+          final payload = {
+            'trip_id': _activeTripId,
+            'user_id': _authProvider?.user?.id ?? '',
+            'approval_status': 'active',
+            'fuel_amount': _fuelAmount,
+            'fuel_bill_url': _fuelBillUrl,
+            'misc_amount': _miscAmount,
+            'misc_bill_url': _miscBillUrl,
+            'misc_particulars': _miscRemarks,
+          };
+          final updated = await _tripService.saveTrip(payload);
+          // If backend converted to remote URL, retain it
+          if (updated.fuelBill?.imageUrl != null && updated.fuelBill!.imageUrl.startsWith('http')) {
+            _fuelBillUrl = updated.fuelBill!.imageUrl;
+          }
+          if (updated.miscBillUrl != null && updated.miscBillUrl!.startsWith('http')) {
+            _miscBillUrl = updated.miscBillUrl;
+          }
+          await _saveActiveTripLocally();
+        } catch (e) {
+          debugPrint("addExpense backend sync deferred: $e");
+        }
+      }
+      return true;
+    } catch (e) {
+      debugPrint("addExpense error: $e");
+      return false;
     }
-    return true;
   }
 
   void updateAuth(AuthProvider auth) {
     _authProvider = auth;
     if (auth.isAuthenticated) {
-      // 1. Instantly restore from local storage so UI doesn't reset to "START SHIFT"
-      _restoreActiveTripLocally();
-      // 2. Fetch server history and verify sync
-      loadTrips();
-    } else {
-      _trips = [];
-      _isTripActive = false;
-      _activeTripId = null;
-      _saveActiveTripLocally();
+      _restoreActiveTripLocally().then((_) {
+        loadTrips();
+      });
     }
   }
 
@@ -210,33 +216,41 @@ class TripProvider with ChangeNotifier {
       final currentUserId = _authProvider?.user?.id;
       _trips = await _tripService.getTrips(userId: currentUserId);
       
-      // If we don't have an active trip locally, check if server has an active trip
-      if (!_isTripActive && _trips.isNotEmpty) {
-        try {
-          final serverActiveTrip = _trips.firstWhere(
-            (t) => t.status.toLowerCase() == 'active' && 
-                   (currentUserId == null || currentUserId.isEmpty || t.employeeId == currentUserId),
-          );
-          _isTripActive = true;
+      // Look for any active trip in trips list
+      TripLog? serverActiveTrip;
+      for (final t in _trips) {
+        if (t.status.toLowerCase() == 'active') {
+          serverActiveTrip = t;
+          break;
+        }
+      }
+
+      if (serverActiveTrip != null) {
+        _isTripActive = true;
+        if (serverActiveTrip.id != null && !serverActiveTrip.id!.startsWith('offline_')) {
           _activeTripId = serverActiveTrip.id;
+        }
+        if (_startReading == '0' || _startReading.isEmpty) {
           _startReading = serverActiveTrip.startReading.toString();
+        }
+        if (_startOdometerImageUrl.isEmpty) {
           _startOdometerImageUrl = serverActiveTrip.startOdometerImageUrl;
-          
-          if (serverActiveTrip.fuelBill != null && serverActiveTrip.fuelBill!.amount > 0) {
+        }
+        if (serverActiveTrip.fuelBill != null && serverActiveTrip.fuelBill!.amount > 0) {
+          if (_fuelAmount == 0.0 || _fuelBillUrl == null) {
             _fuelAmount = serverActiveTrip.fuelBill!.amount;
             _fuelBillUrl = serverActiveTrip.fuelBill!.imageUrl;
           }
-          if (serverActiveTrip.miscAmount > 0) {
+        }
+        if (serverActiveTrip.miscAmount > 0) {
+          if (_miscAmount == 0.0 || _miscBillUrl == null) {
             _miscAmount = serverActiveTrip.miscAmount;
             _miscBillUrl = serverActiveTrip.miscBillUrl;
             _miscRemarks = serverActiveTrip.miscRemarks;
           }
-          
-          _startGpsTracker();
-          await _saveActiveTripLocally();
-        } catch (_) {
-          // No active trip on server
         }
+        _startGpsTracker();
+        await _saveActiveTripLocally();
       }
 
     } catch (e) {

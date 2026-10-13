@@ -93,6 +93,10 @@ export async function POST(request: Request) {
       // A. EXPENSE SUBMISSION during active shift
       if (!body.start_reading && (body.fuel_amount !== undefined || body.misc_amount !== undefined)) {
         let targetId = tripTargetId;
+        const isUuid = targetId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetId);
+        if (!isUuid) {
+          targetId = null;
+        }
         
         if (!targetId) {
           const { data: activeTrips } = await supabaseAdmin
@@ -140,6 +144,9 @@ export async function POST(request: Request) {
           if (error) throw error;
           return NextResponse.json(data[0]);
         }
+
+        // Return gracefully without altering active trips
+        return NextResponse.json({ message: "Expense noted", ...body });
       }
 
       // B. START SHIFT: Close previous orphaned active trips to prevent clutter
@@ -178,7 +185,8 @@ export async function POST(request: Request) {
     } else if (body.approval_status === 'completed' || body.approval_status === 'pending') {
       
       let existingTrip: any = null;
-      if (tripTargetId) {
+      const isUuid = tripTargetId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tripTargetId);
+      if (isUuid) {
         const { data: found } = await supabaseAdmin
           .from('trip_logs')
           .select('*')

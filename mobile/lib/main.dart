@@ -12,13 +12,16 @@ void main() async {
   final authProvider = AuthProvider();
   await authProvider.init();
 
+  final tripProvider = TripProvider();
+  await tripProvider.init(authProvider);
+
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: authProvider),
         ChangeNotifierProxyProvider<AuthProvider, TripProvider>(
-          create: (_) => TripProvider(),
-          update: (_, auth, tripProvider) => tripProvider!..updateAuth(auth),
+          create: (_) => tripProvider,
+          update: (_, auth, prov) => (prov ?? tripProvider)..updateAuth(auth),
         ),
       ],
       child: const MyApp(),

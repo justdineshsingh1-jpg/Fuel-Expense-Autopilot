@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../models/trip_location.dart';
 import 'camera_capture_screen.dart';
 
 class TripFormScreen extends StatefulWidget {

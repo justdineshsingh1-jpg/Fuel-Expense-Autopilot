@@ -38,6 +38,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _showStartShiftModal(BuildContext context) {
     String? capturedImageUrl;
+    bool isStarting = false;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -46,7 +47,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       builder: (ctx) {
         return StatefulBuilder(
-          builder: (BuildContext context, StateSetter setState) {
+          builder: (BuildContext modalCtx, StateSetter modalSetState) {
             return Padding(
               padding: EdgeInsets.only(
                 bottom: MediaQuery.of(ctx).viewInsets.bottom,
@@ -81,10 +82,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   const Text('Live Dashboard Photo *', style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   InkWell(
-                    onTap: () async {
+                    onTap: isStarting ? null : () async {
                       final url = await CameraUtils.captureAndWatermark(context);
                       if (url != null) {
-                        setState(() { capturedImageUrl = url; });
+                        modalSetState(() { capturedImageUrl = url; });
                       }
                     },
                     child: Container(
@@ -109,40 +110,56 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  StatefulBuilder(
-                    builder: (context, setBtnState) {
-                      return SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF1D5BB5),
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          ),
-                          onPressed: () async {
-                            final reading = _odometerController.text.trim();
-                            final parsed = double.tryParse(reading);
-                            if (parsed == null || parsed < 0) {
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a valid numeric starting odometer reading.')));
-                              return;
-                            }
-                            if (capturedImageUrl == null) {
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please capture dashboard photo.')));
-                              return;
-                            }
-                            final img = capturedImageUrl!;
-                            _odometerController.clear();
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1D5BB5),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      onPressed: isStarting ? null : () async {
+                        final reading = _odometerController.text.trim();
+                        final parsed = double.tryParse(reading);
+                        if (parsed == null || parsed < 0) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a valid numeric starting odometer reading.')));
+                          return;
+                        }
+                        if (capturedImageUrl == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please capture dashboard photo.')));
+                          return;
+                        }
+
+                        modalSetState(() { isStarting = true; });
+                        final img = capturedImageUrl!;
+                        final messenger = ScaffoldMessenger.of(context);
+                        final tripProv = Provider.of<TripProvider>(context, listen: false);
+
+                        try {
+                          _odometerController.clear();
+                          if (ctx.mounted) {
                             Navigator.pop(ctx);
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Starting shift...')));
-                            await Provider.of<TripProvider>(context, listen: false).startTrip(
-                              reading,
-                              img,
-                            );
-                          },
-                          child: const Text('Confirm & Submit', style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold)),
-                        ),
-                      );
-                    }
+                          }
+                          messenger.showSnackBar(const SnackBar(content: Text('Starting shift...')));
+                          final ok = await tripProv.startTrip(reading, img);
+                          if (!ok) {
+                            messenger.showSnackBar(const SnackBar(
+                              content: Text('Shift started locally in offline mode.'),
+                              backgroundColor: Colors.orange,
+                            ));
+                          }
+                        } catch (err) {
+                          modalSetState(() { isStarting = false; });
+                          messenger.showSnackBar(SnackBar(
+                            content: Text('Error starting shift: $err'),
+                            backgroundColor: Colors.red,
+                          ));
+                        }
+                      },
+                      child: isStarting
+                        ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : const Text('Confirm & Submit', style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold)),
+                    ),
                   ),
                   const SizedBox(height: 24),
                 ],
@@ -169,7 +186,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       builder: (ctx) {
         return StatefulBuilder(
-          builder: (BuildContext context, StateSetter setState) {
+          builder: (BuildContext modalCtx, StateSetter modalSetState) {
             return Padding(
               padding: EdgeInsets.only(
                 bottom: MediaQuery.of(ctx).viewInsets.bottom,
@@ -219,7 +236,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     onTap: isEnding ? null : () async {
                       final url = await CameraUtils.captureAndWatermark(context);
                       if (url != null) {
-                        setState(() { capturedImageUrl = url; });
+                        modalSetState(() { capturedImageUrl = url; });
                       }
                     },
                     child: Container(
@@ -271,21 +288,40 @@ class _HomeScreenState extends State<HomeScreen> {
                           return;
                         }
 
-                        setState(() { isEnding = true; });
+                        modalSetState(() { isEnding = true; });
                         final img = capturedImageUrl!;
-                        Navigator.pop(ctx);
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ending shift and saving all data...')));
-                        final ok = await Provider.of<TripProvider>(context, listen: false).endTrip(
-                          readingStr,
-                          img,
-                          0.0,
-                          0.0,
-                          'Ended via app'
-                        );
-                        if (ok) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Shift ended successfully! All data recorded.')));
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Shift saved to local queue.')));
+                        final messenger = ScaffoldMessenger.of(context);
+                        final tripProv = Provider.of<TripProvider>(context, listen: false);
+
+                        try {
+                          if (ctx.mounted) {
+                            Navigator.pop(ctx);
+                          }
+                          messenger.showSnackBar(const SnackBar(content: Text('Ending shift and saving all data...')));
+                          final ok = await tripProv.endTrip(
+                            readingStr,
+                            img,
+                            0.0,
+                            0.0,
+                            'Ended via app'
+                          );
+                          if (ok) {
+                            messenger.showSnackBar(const SnackBar(
+                              content: Text('Shift ended successfully! All data recorded.'),
+                              backgroundColor: Colors.green,
+                            ));
+                          } else {
+                            messenger.showSnackBar(const SnackBar(
+                              content: Text('Shift saved to local queue.'),
+                              backgroundColor: Colors.orange,
+                            ));
+                          }
+                        } catch (err) {
+                          modalSetState(() { isEnding = false; });
+                          messenger.showSnackBar(SnackBar(
+                            content: Text('Error ending shift: $err'),
+                            backgroundColor: Colors.red,
+                          ));
                         }
                       },
                       child: isEnding
@@ -314,7 +350,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       builder: (ctx) {
         return StatefulBuilder(
-          builder: (BuildContext context, StateSetter setState) {
+          builder: (BuildContext modalCtx, StateSetter modalSetState) {
             return Padding(
               padding: EdgeInsets.only(
                 bottom: MediaQuery.of(ctx).viewInsets.bottom,
@@ -354,7 +390,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             );
                           }).toList(),
                           onChanged: (String? newValue) {
-                            setState(() {
+                            modalSetState(() {
                               if (newValue != null) _selectedExpenseType = newValue;
                             });
                           },
@@ -391,7 +427,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       onTap: isSubmitting ? null : () async {
                         final url = await CameraUtils.captureAndWatermark(context);
                         if (url != null) {
-                          setState(() { capturedImageUrl = url; });
+                          modalSetState(() { capturedImageUrl = url; });
                         }
                       },
                       child: Container(
@@ -436,24 +472,35 @@ class _HomeScreenState extends State<HomeScreen> {
                             return;
                           }
 
-                          setState(() { isSubmitting = true; });
+                          modalSetState(() { isSubmitting = true; });
                           final remarks = _expenseRemarksController.text.trim();
                           final imgUrl = capturedImageUrl!;
+                          final messenger = ScaffoldMessenger.of(context);
+                          final tripProv = Provider.of<TripProvider>(context, listen: false);
 
-                          final ok = await Provider.of<TripProvider>(context, listen: false).addExpense(
-                            _selectedExpenseType,
-                            amt,
-                            remarks,
-                            imgUrl,
-                          );
+                          try {
+                            final ok = await tripProv.addExpense(
+                              _selectedExpenseType,
+                              amt,
+                              remarks,
+                              imgUrl,
+                            );
 
-                          _expenseAmountController.clear();
-                          _expenseRemarksController.clear();
-                          Navigator.pop(ctx);
-                          if (ok) {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Expense bill added and saved!')));
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Expense saved locally.')));
+                            _expenseAmountController.clear();
+                            _expenseRemarksController.clear();
+                            if (ctx.mounted) {
+                              Navigator.pop(ctx);
+                            }
+                            messenger.showSnackBar(SnackBar(
+                              content: Text(ok ? 'Expense bill added and saved!' : 'Expense saved locally.'),
+                              backgroundColor: ok ? Colors.green : Colors.orange,
+                            ));
+                          } catch (err) {
+                            modalSetState(() { isSubmitting = false; });
+                            messenger.showSnackBar(SnackBar(
+                              content: Text('Error saving expense: $err'),
+                              backgroundColor: Colors.red,
+                            ));
                           }
                         },
                         child: isSubmitting 
