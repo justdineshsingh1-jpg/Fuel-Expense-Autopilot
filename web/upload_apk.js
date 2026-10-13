@@ -29,11 +29,22 @@ async function upload() {
         process.exit(1);
     }
 
+    // Also upload to FuelApp_latest.apk for easy fixed-link access
+    await supabase.storage
+        .from('apks')
+        .upload('FuelApp_latest.apk', fileBuffer, {
+            contentType: 'application/vnd.android.package-archive',
+            upsert: true
+        });
+
     const { data: publicUrlData } = supabase.storage.from('apks').getPublicUrl(filename);
+    const { data: latestUrlData } = supabase.storage.from('apks').getPublicUrl('FuelApp_latest.apk');
     console.log('\n========================================================');
     console.log('UPLOAD SUCCESSFUL!');
-    console.log('Here is your permanent instant-download link:');
+    console.log('Versioned download link:');
     console.log(publicUrlData.publicUrl);
+    console.log('\nLatest fixed download link:');
+    console.log(latestUrlData.publicUrl);
     console.log('========================================================\n');
 }
 upload();
