@@ -54,6 +54,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
     const userId = searchParams.get('user_id');
+    const status = searchParams.get('status');
 
     let query = supabaseAdmin
       .from('trip_logs')
@@ -65,6 +66,9 @@ export async function GET(request: Request) {
     }
     if (userId) {
       query = query.eq('user_id', userId);
+    }
+    if (status && status !== 'all') {
+      query = query.eq('approval_status', status);
     }
 
     const { data, error } = await query;
@@ -86,44 +90,70 @@ export async function POST(request: Request) {
     // ----------------------------------------------------
     if (body.approval_status === 'active') {
       
-      // If this is an EXPENSE submission during an active trip, update the trip row
-      if (!body.start_reading && (body.fuel_amount || body.misc_amount)) {
-        let activeQuery = supabaseAdmin
-          .from('trip_logs')
-          .select('id')
-          .eq('user_id', body.user_id)
-          .eq('approval_status', 'active');
-          
-        if (tripTargetId) {
-          activeQuery = activeQuery.eq('id', tripTargetId);
-        } else {
-          activeQuery = activeQuery.order('created_at', { ascending: false }).limit(1);
+      // A. EXPENSE SUBMISSION during active shift
+      if (!body.start_reading && (body.fuel_amount !== undefined || body.misc_amount !== undefined)) {
+        let targetId = tripTargetId;
+        
+        if (!targetId) {
+          const { data: activeTrips } = await supabaseAdmin
+            .from('trip_logs')
+            .select('id')
+            .eq('user_id', body.user_id)
+            .eq('approval_status', 'active')
+            .order('created_at', { ascending: false })
+            .limit(1);
+            
+          if (activeTrips && activeTrips.length > 0) {
+            targetId = activeTrips[0].id;
+          }
         }
-          
-        const { data: activeTrips, error: fetchErr } = await activeQuery;
-          
-        if (!fetchErr && activeTrips && activeTrips.length > 0) {
+        
+        // Fallback to most recent trip if none marked active
+        if (!targetId) {
+          const { data: recentTrips } = await supabaseAdmin
+            .from('trip_logs')
+            .select('id')
+            .eq('user_id', body.user_id)
+            .order('created_at', { ascending: false })
+            .limit(1);
+          if (recentTrips && recentTrips.length > 0) {
+            targetId = recentTrips[0].id;
+          }
+        }
+
+        if (targetId) {
           const updateExpenseData: Record<string, any> = {
             updated_at: new Date().toISOString()
           };
           if (body.fuel_amount !== undefined) updateExpenseData.fuel_amount = body.fuel_amount;
           if (body.fuel_liters !== undefined) updateExpenseData.fuel_liters = body.fuel_liters;
-          if (body.fuel_bill_url !== undefined) updateExpenseData.fuel_bill_url = body.fuel_bill_url;
+          if (body.fuel_bill_url !== undefined && body.fuel_bill_url !== null) updateExpenseData.fuel_bill_url = body.fuel_bill_url;
           if (body.misc_amount !== undefined) updateExpenseData.misc_amount = body.misc_amount;
           if (body.misc_particulars !== undefined) updateExpenseData.misc_particulars = body.misc_particulars;
-          if (body.misc_bill_url !== undefined) updateExpenseData.misc_bill_url = body.misc_bill_url;
+          if (body.misc_bill_url !== undefined && body.misc_bill_url !== null) updateExpenseData.misc_bill_url = body.misc_bill_url;
 
           const { data, error } = await supabaseAdmin
             .from('trip_logs')
             .update(sanitize(updateExpenseData))
-            .eq('id', activeTrips[0].id)
+            .eq('id', targetId)
             .select();
           if (error) throw error;
           return NextResponse.json(data[0]);
         }
       }
 
-      // STANDARD CHECK-IN (START SHIFT): Satisfy NOT NULL constraints by duplicating start values
+      // B. START SHIFT: Close previous orphaned active trips to prevent clutter
+      try {
+        await supabaseAdmin
+          .from('trip_logs')
+          .update({ approval_status: 'abandoned', updated_at: new Date().toISOString() })
+          .eq('user_id', body.user_id)
+          .eq('approval_status', 'active');
+      } catch (cleanErr) {
+        console.warn("Could not clean old active trips:", cleanErr);
+      }
+
+      // Satisfy NOT NULL constraints on start check-in
       const startData: Record<string, any> = {
         ...body,
         log_date: body.log_date || new Date().toISOString().split('T')[0],
@@ -147,7 +177,6 @@ export async function POST(request: Request) {
     // ----------------------------------------------------
     } else if (body.approval_status === 'completed' || body.approval_status === 'pending') {
       
-      // Target existing active trip
       let existingTrip: any = null;
       if (tripTargetId) {
         const { data: found } = await supabaseAdmin
@@ -171,7 +200,7 @@ export async function POST(request: Request) {
         }
       }
 
-      // Fallback: get most recent trip for user if none marked 'active'
+      // Fallback: get most recent trip for user
       if (!existingTrip) {
         const { data: recentTrips } = await supabaseAdmin
           .from('trip_logs')
@@ -186,7 +215,7 @@ export async function POST(request: Request) {
 
       const startReading = Number(existingTrip?.start_reading || body.start_reading || 0);
       const endReading = Number(body.end_reading || startReading);
-      const claimedDistance = endReading > startReading ? Number((endReading - startReading).toFixed(2)) : 0;
+      const claimedDistance = endReading >= startReading ? Number((endReading - startReading).toFixed(1)) : 0;
       
       let osrmDistanceKm = 0;
       let variancePercent = 0;
@@ -252,20 +281,26 @@ export async function POST(request: Request) {
           });
         }
 
-        // Save waypoints to Storage bucket for RouteMap rendering
+        // Save waypoints to Storage bucket for RouteMap rendering (by tripId and by userId_date)
         try {
+          const tripIdKey = existingTrip?.id || tripTargetId;
           const logDate = existingTrip?.log_date || new Date().toISOString().split('T')[0];
-          const mapPath = `map_history/${body.user_id}_${logDate}.json`;
           const mapBuffer = Buffer.from(JSON.stringify({ waypoints: body.waypoints }));
+
+          if (tripIdKey) {
+            await supabaseAdmin.storage
+              .from('fuel-receipts')
+              .upload(`map_history/${tripIdKey}.json`, mapBuffer, { contentType: 'application/json', upsert: true });
+          }
           await supabaseAdmin.storage
             .from('fuel-receipts')
-            .upload(mapPath, mapBuffer, { contentType: 'application/json', upsert: true });
+            .upload(`map_history/${body.user_id}_${logDate}.json`, mapBuffer, { contentType: 'application/json', upsert: true });
         } catch (storageErr) {
           console.error("Storage upload error for map_history:", storageErr);
         }
       }
 
-      // Secondary Check: Verify Fuel Bill OCR
+      // Check Fuel Bill OCR
       if (body.fuel_amount > 0 && body.ocr_data?.detected_amount) {
         const amountDiff = Math.abs(Number(body.fuel_amount) - Number(body.ocr_data.detected_amount));
         if (amountDiff > 5) {
@@ -294,16 +329,15 @@ export async function POST(request: Request) {
         updated_at: new Date().toISOString()
       };
 
-      // Only update expense fields if provided in this checkout or preserve existing
-      if (body.fuel_amount !== undefined) updateData.fuel_amount = body.fuel_amount;
-      if (body.fuel_liters !== undefined) updateData.fuel_liters = body.fuel_liters;
+      // Preserve existing expenses or update if provided
+      if (body.fuel_amount !== undefined && body.fuel_amount > 0) updateData.fuel_amount = body.fuel_amount;
+      if (body.fuel_liters !== undefined && body.fuel_liters > 0) updateData.fuel_liters = body.fuel_liters;
       if (body.fuel_bill_url !== undefined && body.fuel_bill_url !== null) updateData.fuel_bill_url = body.fuel_bill_url;
-      if (body.misc_amount !== undefined) updateData.misc_amount = body.misc_amount;
+      if (body.misc_amount !== undefined && body.misc_amount > 0) updateData.misc_amount = body.misc_amount;
       if (body.misc_bill_url !== undefined && body.misc_bill_url !== null) updateData.misc_bill_url = body.misc_bill_url;
-      if (body.misc_particulars !== undefined) updateData.misc_particulars = body.misc_particulars;
+      if (body.misc_particulars !== undefined && body.misc_particulars !== '') updateData.misc_particulars = body.misc_particulars;
 
       if (existingTrip) {
-        // DO NOT overwrite start reading or start image with end values
         const { data, error } = await supabaseAdmin
           .from('trip_logs')
           .update(sanitize(updateData))
@@ -312,7 +346,6 @@ export async function POST(request: Request) {
         if (error) throw error;
         return NextResponse.json(data[0]);
       } else {
-        // Fallback insert if no prior trip existed
         updateData.user_id = body.user_id;
         updateData.log_date = new Date().toISOString().split('T')[0];
         updateData.start_reading = body.start_reading || endReading;
@@ -328,7 +361,7 @@ export async function POST(request: Request) {
       }
     }
     
-    // Default fallback
+    // Default insert fallback
     const { data, error } = await supabaseAdmin
       .from('trip_logs')
       .insert([sanitize(body)])

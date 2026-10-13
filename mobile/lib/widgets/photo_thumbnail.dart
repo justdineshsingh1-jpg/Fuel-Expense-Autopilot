@@ -16,32 +16,68 @@ class PhotoThumbnail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool hasPath = path.trim().isNotEmpty;
-    final bool isHttp = hasPath && (path.startsWith('http://') || path.startsWith('https://'));
+    final String cleanPath = path.trim();
+    final bool hasPath = cleanPath.isNotEmpty;
+    final bool isHttp = hasPath && (cleanPath.startsWith('http://') || cleanPath.startsWith('https://'));
+
+    Widget buildPlaceholder() {
+      return Container(
+        color: Colors.grey.shade100,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.image_outlined, color: Colors.grey.shade400, size: size * 0.35),
+            const SizedBox(height: 2),
+            Text(
+              'No photo',
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 10, fontWeight: FontWeight.w500),
+            ),
+          ],
+        ),
+      );
+    }
 
     Widget buildImageWidget(BoxFit fit) {
       if (!hasPath) {
-        return const Center(child: Icon(Icons.image_not_supported, color: Colors.grey));
+        return buildPlaceholder();
       }
+
       if (isHttp) {
         return CachedNetworkImage(
-          imageUrl: path,
+          imageUrl: cleanPath,
           fit: fit,
-          placeholder: (context, url) => const Center(
-            child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+          placeholder: (context, url) => Center(
+            child: SizedBox(
+              width: 24, 
+              height: 24, 
+              child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).primaryColor),
+            ),
           ),
-          errorWidget: (context, url, error) => const Center(
-            child: Icon(Icons.broken_image, color: Colors.grey),
+          errorWidget: (context, url, error) => Container(
+            color: Colors.grey.shade100,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.photo_camera_outlined, color: Colors.blueGrey.shade400, size: size * 0.35),
+                const SizedBox(height: 2),
+                Text(
+                  'Evidence Photo',
+                  style: TextStyle(color: Colors.blueGrey.shade600, fontSize: 10, fontWeight: FontWeight.w500),
+                ),
+              ],
+            ),
           ),
         );
       }
+
       try {
-        final file = File(path);
+        final file = File(cleanPath);
         if (file.existsSync()) {
           return Image.file(file, fit: fit);
         }
       } catch (_) {}
-      return const Center(child: Icon(Icons.broken_image, color: Colors.grey));
+
+      return buildPlaceholder();
     }
 
     return GestureDetector(
@@ -52,11 +88,13 @@ class PhotoThumbnail extends StatelessWidget {
             builder: (context) => Scaffold(
               backgroundColor: Colors.black,
               appBar: AppBar(
-                backgroundColor: Colors.transparent,
+                backgroundColor: Colors.black,
                 iconTheme: const IconThemeData(color: Colors.white),
+                title: const Text('Evidence Photo', style: TextStyle(color: Colors.white)),
               ),
               body: Center(
                 child: InteractiveViewer(
+                  maxScale: 4.0,
                   child: buildImageWidget(BoxFit.contain),
                 ),
               ),
@@ -68,9 +106,16 @@ class PhotoThumbnail extends StatelessWidget {
         width: size,
         height: size,
         decoration: BoxDecoration(
-          color: Colors.grey[100],
+          color: Colors.white,
           border: Border.all(color: Colors.grey.shade300),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         clipBehavior: Clip.antiAlias,
         child: buildImageWidget(BoxFit.cover),

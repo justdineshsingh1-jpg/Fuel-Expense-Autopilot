@@ -109,35 +109,40 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF1D5BB5),
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                      onPressed: () async {
-                        if (_odometerController.text.trim().isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter starting odometer reading.')));
-                          return;
-                        }
-                        if (capturedImageUrl == null) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please capture dashboard photo.')));
-                          return;
-                        }
-                        final reading = _odometerController.text.trim();
-                        final img = capturedImageUrl!;
-                        _odometerController.clear();
-                        Navigator.pop(ctx);
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Starting shift...')));
-                        await Provider.of<TripProvider>(context, listen: false).startTrip(
-                          reading,
-                          img,
-                        );
-                      },
-                      child: const Text('Confirm & Submit', style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold)),
-                    ),
+                  StatefulBuilder(
+                    builder: (context, setBtnState) {
+                      return SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF1D5BB5),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onPressed: () async {
+                            final reading = _odometerController.text.trim();
+                            final parsed = double.tryParse(reading);
+                            if (parsed == null || parsed < 0) {
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a valid numeric starting odometer reading.')));
+                              return;
+                            }
+                            if (capturedImageUrl == null) {
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please capture dashboard photo.')));
+                              return;
+                            }
+                            final img = capturedImageUrl!;
+                            _odometerController.clear();
+                            Navigator.pop(ctx);
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Starting shift...')));
+                            await Provider.of<TripProvider>(context, listen: false).startTrip(
+                              reading,
+                              img,
+                            );
+                          },
+                          child: const Text('Confirm & Submit', style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold)),
+                        ),
+                      );
+                    }
                   ),
                   const SizedBox(height: 24),
                 ],
@@ -152,6 +157,10 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showEndShiftModal(BuildContext context) {
     final TextEditingController endOdoController = TextEditingController();
     String? capturedImageUrl;
+    bool isEnding = false;
+    final tripProv = Provider.of<TripProvider>(context, listen: false);
+    final double startReadingVal = double.tryParse(tripProv.startReading) ?? 0.0;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -179,23 +188,35 @@ class _HomeScreenState extends State<HomeScreen> {
                       IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
                     ],
                   ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      'Shift started at: ${startReadingVal.toStringAsFixed(0)} KM',
+                      style: TextStyle(color: Colors.blue.shade900, fontWeight: FontWeight.w600, fontSize: 13),
+                    ),
+                  ),
                   const SizedBox(height: 16),
                   const Text('End Odometer Reading (KM) *', style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   TextField(
                     controller: endOdoController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      hintText: 'e.g. 45250',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: InputDecoration(
+                      hintText: 'Must be >= ${startReadingVal.toStringAsFixed(0)} KM',
+                      border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     ),
                   ),
                   const SizedBox(height: 16),
                   const Text('Live Dashboard Photo *', style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   InkWell(
-                    onTap: () async {
+                    onTap: isEnding ? null : () async {
                       final url = await CameraUtils.captureAndWatermark(context);
                       if (url != null) {
                         setState(() { capturedImageUrl = url; });
@@ -230,21 +251,32 @@ class _HomeScreenState extends State<HomeScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
-                      onPressed: () async {
-                        if (endOdoController.text.trim().isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter end odometer reading.')));
+                      onPressed: isEnding ? null : () async {
+                        final readingStr = endOdoController.text.trim();
+                        final endVal = double.tryParse(readingStr);
+                        if (endVal == null || endVal <= 0) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a valid ending odometer reading.')));
                           return;
                         }
                         if (capturedImageUrl == null) {
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please capture end dashboard photo.')));
                           return;
                         }
-                        final reading = endOdoController.text.trim();
+
+                        if (endVal < startReadingVal) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                            content: Text('End reading ($endVal KM) cannot be less than start reading ($startReadingVal KM)!'),
+                            backgroundColor: Colors.red,
+                          ));
+                          return;
+                        }
+
+                        setState(() { isEnding = true; });
                         final img = capturedImageUrl!;
                         Navigator.pop(ctx);
                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ending shift and saving all data...')));
                         final ok = await Provider.of<TripProvider>(context, listen: false).endTrip(
-                          reading,
+                          readingStr,
                           img,
                           0.0,
                           0.0,
@@ -256,7 +288,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Shift saved to local queue.')));
                         }
                       },
-                      child: const Text('Confirm & End Trip', style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold)),
+                      child: isEnding
+                        ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : const Text('Confirm & End Trip', style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold)),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -271,6 +305,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _showAddExpenseModal(BuildContext context) {
     String? capturedImageUrl;
+    bool isSubmitting = false;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -331,7 +366,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 8),
                     TextField(
                       controller: _expenseAmountController,
-                      keyboardType: TextInputType.number,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       decoration: const InputDecoration(
                         hintText: 'e.g. 450',
                         border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
@@ -344,7 +379,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     TextField(
                       controller: _expenseRemarksController,
                       decoration: const InputDecoration(
-                        hintText: 'e.g. Changed engine oil',
+                        hintText: 'e.g. Changed engine oil or fuel slip',
                         border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
                         contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       ),
@@ -353,7 +388,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     const Text('Live Bill Photo *', style: TextStyle(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
                     InkWell(
-                      onTap: () async {
+                      onTap: isSubmitting ? null : () async {
                         final url = await CameraUtils.captureAndWatermark(context);
                         if (url != null) {
                           setState(() { capturedImageUrl = url; });
@@ -389,20 +424,41 @@ class _HomeScreenState extends State<HomeScreen> {
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         ),
-                        onPressed: () {
-                          if (_expenseAmountController.text.isEmpty || capturedImageUrl == null) return;
-                          Provider.of<TripProvider>(context, listen: false).addExpense(
+                        onPressed: isSubmitting ? null : () async {
+                          final amtStr = _expenseAmountController.text.trim();
+                          final amt = double.tryParse(amtStr);
+                          if (amt == null || amt <= 0) {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a valid expense amount.')));
+                            return;
+                          }
+                          if (capturedImageUrl == null) {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please capture a photo of the bill.')));
+                            return;
+                          }
+
+                          setState(() { isSubmitting = true; });
+                          final remarks = _expenseRemarksController.text.trim();
+                          final imgUrl = capturedImageUrl!;
+
+                          final ok = await Provider.of<TripProvider>(context, listen: false).addExpense(
                             _selectedExpenseType,
-                            double.parse(_expenseAmountController.text),
-                            _expenseRemarksController.text,
-                            capturedImageUrl!,
+                            amt,
+                            remarks,
+                            imgUrl,
                           );
+
                           _expenseAmountController.clear();
                           _expenseRemarksController.clear();
                           Navigator.pop(ctx);
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Expense added successfully!')));
+                          if (ok) {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Expense bill added and saved!')));
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Expense saved locally.')));
+                          }
                         },
-                        child: const Text('Confirm & Submit', style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold)),
+                        child: isSubmitting 
+                          ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                          : const Text('Confirm & Submit', style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold)),
                       ),
                     ),
                     const SizedBox(height: 24),

@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/trip_log.dart';
 import '../models/fuel_bill.dart';
 import 'api_service.dart';
@@ -7,29 +10,62 @@ import '../config/api_config.dart';
 class TripService {
   final ApiService _apiService = ApiService();
   final OfflineSyncService _syncService = OfflineSyncService();
+  static const String _tripsCacheKey = 'cached_trips_history_json';
 
   Future<List<TripLog>> getTrips({String? userId}) async {
-    try {
-      // Opportunistic sync on fetch
-      await _syncService.syncPendingTrips(_apiService);
+    // 1. Trigger background opportunistic sync without blocking UI fetch
+    _syncService.syncPendingTrips(_apiService).catchError((e) {
+      debugPrint("Background sync error: $e");
+      return false;
+    });
 
+    try {
       final response = await _apiService.client.get(
         ApiConfig.trips,
         queryParameters: userId != null && userId.isNotEmpty ? {'user_id': userId} : null,
       );
+
       if (response.data != null && response.data is List) {
-        return (response.data as List).map((t) => _parseTripLog(t)).toList();
+        final list = (response.data as List).map((t) => _parseTripLog(t)).toList();
+        
+        // Cache trips locally in background
+        _cacheTripsLocally(response.data as List);
+        return list;
       }
-      return [];
     } catch (e) {
-      print("Get Trips Error: " + e.toString());
-      return [];
+      debugPrint("Get Trips Network Error: $e. Falling back to local cache.");
     }
+
+    // 2. Fallback to cached history so user NEVER sees an empty screen
+    return await _loadCachedTrips();
+  }
+
+  Future<void> _cacheTripsLocally(List<dynamic> rawList) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_tripsCacheKey, jsonEncode(rawList));
+    } catch (e) {
+      debugPrint("Error caching trips: $e");
+    }
+  }
+
+  Future<List<TripLog>> _loadCachedTrips() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final str = prefs.getString(_tripsCacheKey);
+      if (str != null && str.isNotEmpty) {
+        final list = jsonDecode(str) as List;
+        return list.map((t) => _parseTripLog(t)).toList();
+      }
+    } catch (e) {
+      debugPrint("Error reading cached trips: $e");
+    }
+    return [];
   }
 
   Future<TripLog> saveTrip(Map<String, dynamic> payload) async {
     try {
-      // 1. Try to upload images first if they are local
+      // 1. Try to upload images first if they are local files
       payload = await _syncService.uploadLocalImages(payload, _apiService);
 
       // 2. Submit trip
@@ -41,24 +77,29 @@ class TripService {
       final t = response.data;
       return _parseTripLog(t);
     } catch (e) {
-      print("Network Error during saveTrip, queueing offline: " + e.toString());
-      // If ANY network error happens, queue it offline!
+      debugPrint("Network Error during saveTrip, queueing offline: $e");
+      // Queue offline for automatic sync
       await _syncService.enqueuePayload(payload);
       
-      // Return a mocked local trip log so the UI doesn't break
+      // Calculate distance safely
+      final startR = double.tryParse(payload['start_reading']?.toString() ?? '') ?? 0.0;
+      final endR = double.tryParse(payload['end_reading']?.toString() ?? '') ?? startR;
+      final dist = (endR > startR) ? (endR - startR) : 0.0;
+
+      // Return a reliable local trip log so the UI doesn't break
       return TripLog(
-        id: 'offline_' + DateTime.now().millisecondsSinceEpoch.toString(),
+        id: payload['trip_id'] ?? ('offline_' + DateTime.now().millisecondsSinceEpoch.toString()),
         employeeId: payload['user_id'] ?? '',
         date: DateTime.now(),
-        startReading: double.tryParse(payload['start_reading']?.toString() ?? '') ?? 0.0,
+        startReading: startR,
         startOdometerImageUrl: payload['start_odometer_image_url'] ?? '',
-        endReading: double.tryParse(payload['end_reading']?.toString() ?? '') ?? 0.0,
+        endReading: endR,
         endOdometerImageUrl: payload['end_odometer_image_url'] ?? '',
-        distanceKm: double.tryParse(payload['distance_km']?.toString() ?? '') ?? 0.0,
+        distanceKm: dist,
         locations: [],
-        fuelBill: (payload['fuel_amount'] != null && (double.tryParse(payload['fuel_amount'].toString()) ?? 0) > 0)
+        fuelBill: (payload['fuel_bill_url'] != null && payload['fuel_bill_url'].toString().isNotEmpty)
             ? FuelBill(
-                amount: double.tryParse(payload['fuel_amount'].toString()) ?? 0,
+                amount: double.tryParse(payload['fuel_amount']?.toString() ?? '') ?? 0,
                 imageUrl: payload['fuel_bill_url'] ?? '',
                 fuelType: 'Petrol',
                 remarks: '',
@@ -77,14 +118,15 @@ class TripService {
     FuelBill? parsedFuelBill;
     final fuelAmt = double.tryParse(t['fuel_amount']?.toString() ?? '') ?? 0.0;
     final fuelUrl = t['fuel_bill_url']?.toString();
-    if (fuelAmt > 0 && fuelUrl != null && fuelUrl.isNotEmpty) {
+    // Parse fuel bill whenever an image URL is present, or amount > 0
+    if ((fuelUrl != null && fuelUrl.isNotEmpty) || fuelAmt > 0) {
       double? ocrAmt;
-      if (t['ocr_data'] != null && t['ocr_data']['detected_amount'] != null) {
+      if (t['ocr_data'] != null && t['ocr_data'] is Map && t['ocr_data']['detected_amount'] != null) {
         ocrAmt = double.tryParse(t['ocr_data']['detected_amount'].toString());
       }
       parsedFuelBill = FuelBill(
         amount: fuelAmt,
-        imageUrl: fuelUrl,
+        imageUrl: fuelUrl ?? '',
         fuelType: 'Petrol',
         remarks: '',
         ocrAmount: ocrAmt,
@@ -95,15 +137,22 @@ class TripService {
     final miscUrl = t['misc_bill_url']?.toString();
     final miscRemarks = t['misc_particulars']?.toString() ?? '';
 
+    final startR = double.tryParse(t['start_reading']?.toString() ?? '') ?? 0.0;
+    final endR = double.tryParse(t['end_reading']?.toString() ?? '') ?? startR;
+    double dist = double.tryParse(t['distance_km']?.toString() ?? '') ?? 0.0;
+    if (dist <= 0 && endR > startR) {
+      dist = endR - startR;
+    }
+
     return TripLog(
       id: t['id']?.toString(),
       employeeId: t['user_id'] ?? '',
-      date: DateTime.tryParse(t['created_at'] ?? '') ?? DateTime.now(),
-      startReading: double.tryParse(t['start_reading']?.toString() ?? '') ?? 0.0,
+      date: DateTime.tryParse(t['created_at'] ?? t['log_date'] ?? '') ?? DateTime.now(),
+      startReading: startR,
       startOdometerImageUrl: t['start_odometer_image_url'] ?? '',
-      endReading: double.tryParse(t['end_reading']?.toString() ?? '') ?? 0.0,
+      endReading: endR,
       endOdometerImageUrl: t['end_odometer_image_url'] ?? '',
-      distanceKm: double.tryParse(t['distance_km']?.toString() ?? '') ?? 0.0,
+      distanceKm: dist,
       locations: [],
       fuelBill: parsedFuelBill,
       miscAmount: miscAmt,

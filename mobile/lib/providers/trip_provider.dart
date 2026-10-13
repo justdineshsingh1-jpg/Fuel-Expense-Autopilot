@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/trip_log.dart';
 import '../services/trip_service.dart';
 import '../services/location_service.dart';
@@ -27,6 +29,9 @@ class TripProvider with ChangeNotifier {
   String? _fuelBillUrl;
   String? _miscBillUrl;
 
+  // Persistence Key
+  static const String _activeTripPrefsKey = 'persisted_active_trip_state';
+
   List<TripLog> get trips => _trips;
   bool get isLoading => _isLoading;
   bool get isTripActive => _isTripActive;
@@ -40,6 +45,111 @@ class TripProvider with ChangeNotifier {
   String? get fuelBillUrl => _fuelBillUrl;
   String? get miscBillUrl => _miscBillUrl;
   
+  // ----------------------------------------------------
+  // LOCAL ACTIVE TRIP PERSISTENCE (Crash / Restart Proof)
+  // ----------------------------------------------------
+  Future<void> _saveActiveTripLocally() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!_isTripActive) {
+        await prefs.remove(_activeTripPrefsKey);
+        return;
+      }
+      final data = {
+        'isTripActive': _isTripActive,
+        'activeTripId': _activeTripId,
+        'userId': _authProvider?.user?.id ?? '',
+        'startReading': _startReading,
+        'startOdometerImageUrl': _startOdometerImageUrl,
+        'liveDistance': _liveDistance,
+        'currentAddress': _currentAddress,
+        'fuelAmount': _fuelAmount,
+        'fuelBillUrl': _fuelBillUrl,
+        'miscAmount': _miscAmount,
+        'miscBillUrl': _miscBillUrl,
+        'miscRemarks': _miscRemarks,
+        'waypoints': _currentWaypoints,
+      };
+      await prefs.setString(_activeTripPrefsKey, jsonEncode(data));
+    } catch (e) {
+      debugPrint("Error saving active trip locally: $e");
+    }
+  }
+
+  Future<bool> _restoreActiveTripLocally() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final str = prefs.getString(_activeTripPrefsKey);
+      if (str == null || str.isEmpty) return false;
+
+      final data = jsonDecode(str);
+      final currentUserId = _authProvider?.user?.id;
+      // Ensure the saved trip belongs to the current user
+      if (currentUserId != null && currentUserId.isNotEmpty && data['userId'] != currentUserId) {
+        return false;
+      }
+
+      if (data['isTripActive'] == true) {
+        _isTripActive = true;
+        _activeTripId = data['activeTripId'];
+        _startReading = data['startReading'] ?? '0';
+        _startOdometerImageUrl = data['startOdometerImageUrl'] ?? '';
+        _liveDistance = (data['liveDistance'] as num?)?.toDouble() ?? 0.0;
+        _currentAddress = data['currentAddress'] ?? 'Locating...';
+        _fuelAmount = (data['fuelAmount'] as num?)?.toDouble() ?? 0.0;
+        _fuelBillUrl = data['fuelBillUrl'];
+        _miscAmount = (data['miscAmount'] as num?)?.toDouble() ?? 0.0;
+        _miscBillUrl = data['miscBillUrl'];
+        _miscRemarks = data['miscRemarks'] ?? '';
+        
+        if (data['waypoints'] != null && data['waypoints'] is List) {
+          _currentWaypoints = List<Map<String, dynamic>>.from(
+            (data['waypoints'] as List).map((w) => Map<String, dynamic>.from(w))
+          );
+        }
+
+        // Resume GPS Tracking seamlessly
+        _startGpsTracker();
+        notifyListeners();
+        return true;
+      }
+    } catch (e) {
+      debugPrint("Error restoring active trip locally: $e");
+    }
+    return false;
+  }
+
+  void _startGpsTracker() {
+    _locationService.startBackgroundTracking((Position pos, String mode, String? address) {
+      if (_currentWaypoints.isNotEmpty) {
+        final last = _currentWaypoints.last;
+        final dist = Geolocator.distanceBetween(
+          (last['lat'] as num).toDouble(), 
+          (last['lng'] as num).toDouble(), 
+          pos.latitude, 
+          pos.longitude
+        );
+        _liveDistance += (dist / 1000.0);
+      }
+      if (address != null && address.isNotEmpty) {
+        _currentAddress = address;
+      }
+      _currentWaypoints.add({
+        'lat': pos.latitude,
+        'lng': pos.longitude,
+        'mode': mode,
+        if (address != null) 'address': address,
+        'timestamp': DateTime.now().toIso8601String(),
+        'accuracy': pos.accuracy,
+        'speed': pos.speed,
+      });
+
+      // Save updated distance and waypoints locally
+      _saveActiveTripLocally();
+      notifyListeners();
+    });
+  }
+
   Future<bool> addExpense(String type, double amount, String remarks, String imageUrl) async {
     if (type.toLowerCase().contains('fuel') || type.toLowerCase().contains('petrol')) {
       _fuelAmount += amount;
@@ -49,15 +159,18 @@ class TripProvider with ChangeNotifier {
       _miscRemarks += '$type: $remarks ($amount) | ';
       _miscBillUrl = imageUrl;
     }
+    
+    // Save locally IMMEDIATELY so app closure never loses the expense
+    await _saveActiveTripLocally();
     notifyListeners();
     
-    // Instantly sync to backend so it's not lost on app crash and shows in Admin Portal
+    // Sync to backend in background
     if (_isTripActive && _activeTripId != null) {
       try {
         final payload = {
           'trip_id': _activeTripId,
           'user_id': _authProvider?.user?.id ?? '',
-          'approval_status': 'active', // Indicates active trip
+          'approval_status': 'active',
           'fuel_amount': _fuelAmount,
           'fuel_bill_url': _fuelBillUrl,
           'misc_amount': _miscAmount,
@@ -65,12 +178,11 @@ class TripProvider with ChangeNotifier {
           'misc_particulars': _miscRemarks,
         };
         await _tripService.saveTrip(payload);
-        // Refresh local trips list so it appears in the UI immediately
-        await loadTrips();
         return true;
       } catch (e) {
-        print("addExpense sync error: $e");
-        return false;
+        debugPrint("addExpense backend sync deferred: $e");
+        // Still return true because it is safely persisted locally and in offline queue!
+        return true;
       }
     }
     return true;
@@ -79,11 +191,15 @@ class TripProvider with ChangeNotifier {
   void updateAuth(AuthProvider auth) {
     _authProvider = auth;
     if (auth.isAuthenticated) {
+      // 1. Instantly restore from local storage so UI doesn't reset to "START SHIFT"
+      _restoreActiveTripLocally();
+      // 2. Fetch server history and verify sync
       loadTrips();
     } else {
       _trips = [];
       _isTripActive = false;
       _activeTripId = null;
+      _saveActiveTripLocally();
     }
   }
 
@@ -94,57 +210,37 @@ class TripProvider with ChangeNotifier {
       final currentUserId = _authProvider?.user?.id;
       _trips = await _tripService.getTrips(userId: currentUserId);
       
-      // RESTORE ACTIVE TRIP STATE ON APP RESTART OR RELOAD FOR CURRENT USER ONLY
-      try {
-        final activeTrip = _trips.firstWhere(
-          (t) => t.status.toLowerCase() == 'active' && 
-                 (currentUserId == null || currentUserId.isEmpty || t.employeeId == currentUserId),
-        );
-        _isTripActive = true;
-        _activeTripId = activeTrip.id;
-        _startReading = activeTrip.startReading.toString();
-        _startOdometerImageUrl = activeTrip.startOdometerImageUrl;
-        
-        // Restore expenses if they exist on the server
-        if (activeTrip.fuelBill != null && activeTrip.fuelBill!.amount > 0) {
-          _fuelAmount = activeTrip.fuelBill!.amount;
-          _fuelBillUrl = activeTrip.fuelBill!.imageUrl;
-        }
-        if (activeTrip.miscAmount > 0) {
-          _miscAmount = activeTrip.miscAmount;
-          _miscBillUrl = activeTrip.miscBillUrl;
-          _miscRemarks = activeTrip.miscRemarks;
-        }
-        
-        // Resume background GPS tracking if not already tracking
-        _locationService.startBackgroundTracking((Position pos, String mode, String? address) {
-          if (_currentWaypoints.isNotEmpty) {
-            final last = _currentWaypoints.last;
-            final dist = Geolocator.distanceBetween(last['lat'], last['lng'], pos.latitude, pos.longitude);
-            _liveDistance += (dist / 1000.0);
+      // If we don't have an active trip locally, check if server has an active trip
+      if (!_isTripActive && _trips.isNotEmpty) {
+        try {
+          final serverActiveTrip = _trips.firstWhere(
+            (t) => t.status.toLowerCase() == 'active' && 
+                   (currentUserId == null || currentUserId.isEmpty || t.employeeId == currentUserId),
+          );
+          _isTripActive = true;
+          _activeTripId = serverActiveTrip.id;
+          _startReading = serverActiveTrip.startReading.toString();
+          _startOdometerImageUrl = serverActiveTrip.startOdometerImageUrl;
+          
+          if (serverActiveTrip.fuelBill != null && serverActiveTrip.fuelBill!.amount > 0) {
+            _fuelAmount = serverActiveTrip.fuelBill!.amount;
+            _fuelBillUrl = serverActiveTrip.fuelBill!.imageUrl;
           }
-          if (address != null) {
-            _currentAddress = address;
+          if (serverActiveTrip.miscAmount > 0) {
+            _miscAmount = serverActiveTrip.miscAmount;
+            _miscBillUrl = serverActiveTrip.miscBillUrl;
+            _miscRemarks = serverActiveTrip.miscRemarks;
           }
-          _currentWaypoints.add({
-            'lat': pos.latitude,
-            'lng': pos.longitude,
-            'mode': mode,
-            if (address != null) 'address': address,
-            'timestamp': DateTime.now().toIso8601String(),
-            'accuracy': pos.accuracy,
-            'speed': pos.speed,
-          });
-          notifyListeners();
-        });
-      } catch (e) {
-        // No active trip found in list
-        _isTripActive = false;
-        _activeTripId = null;
+          
+          _startGpsTracker();
+          await _saveActiveTripLocally();
+        } catch (_) {
+          // No active trip on server
+        }
       }
 
     } catch (e) {
-      print("loadTrips error: $e");
+      debugPrint("loadTrips error: $e");
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -165,6 +261,16 @@ class TripProvider with ChangeNotifier {
       _currentWaypoints = [];
       _liveDistance = 0.0;
       _currentAddress = 'Locating...';
+      _isTripActive = true;
+
+      // Temporary local active ID
+      _activeTripId = 'trip_${DateTime.now().millisecondsSinceEpoch}';
+
+      // Save locally FIRST
+      await _saveActiveTripLocally();
+      
+      // Start GPS Engine
+      _startGpsTracker();
 
       final payload = {
         'user_id': _authProvider?.user?.id ?? '',
@@ -175,39 +281,19 @@ class TripProvider with ChangeNotifier {
       };
       
       final activeTrip = await _tripService.saveTrip(payload);
-      _activeTripId = activeTrip.id;
-      _isTripActive = true;
+      if (activeTrip.id != null && !activeTrip.id!.startsWith('offline_')) {
+        _activeTripId = activeTrip.id;
+        await _saveActiveTripLocally();
+      }
       
-      // Update local trips list with new active trip
+      // Add to local trips list
       _trips.insert(0, activeTrip);
-      
-      // Start Background GPS Engine
-      await _locationService.startBackgroundTracking((Position pos, String mode, String? address) {
-        if (_currentWaypoints.isNotEmpty) {
-          final last = _currentWaypoints.last;
-          final dist = Geolocator.distanceBetween(last['lat'], last['lng'], pos.latitude, pos.longitude);
-          _liveDistance += (dist / 1000.0);
-        }
-        if (address != null) {
-          _currentAddress = address;
-        }
-        _currentWaypoints.add({
-          'lat': pos.latitude,
-          'lng': pos.longitude,
-          'mode': mode,
-          if (address != null) 'address': address,
-          'timestamp': DateTime.now().toIso8601String(),
-          'accuracy': pos.accuracy,
-          'speed': pos.speed,
-        });
-        notifyListeners();
-      });
 
       _isLoading = false;
       notifyListeners();
       return true;
     } catch (e) {
-      print("startTrip error: $e");
+      debugPrint("startTrip error: $e");
       _isLoading = false;
       notifyListeners();
       return false;
@@ -223,7 +309,7 @@ class TripProvider with ChangeNotifier {
       final payload = {
         'trip_id': _activeTripId,
         'user_id': _authProvider?.user?.id ?? '',
-        'approval_status': 'pending', // Marks for checkout routing on backend
+        'approval_status': 'pending',
         'start_reading': _startReading,
         'start_odometer_image_url': _startOdometerImageUrl,
         'end_reading': endReading,
@@ -239,9 +325,12 @@ class TripProvider with ChangeNotifier {
 
       final completedTrip = await _tripService.saveTrip(payload);
       
+      // Mark trip inactive and clear local active storage
       _isTripActive = false;
+      await _saveActiveTripLocally();
+
       _trips.removeWhere((t) => t.id == _activeTripId || (t.id != null && t.id == completedTrip.id));
-      _trips.insert(0, completedTrip); // Add completed trip to top of local state
+      _trips.insert(0, completedTrip);
       
       _currentWaypoints = [];
       _liveDistance = 0.0;
@@ -255,11 +344,11 @@ class TripProvider with ChangeNotifier {
       _isLoading = false;
       notifyListeners();
 
-      // Refresh from server to ensure complete sync
+      // Refresh from server
       loadTrips();
       return true;
     } catch (e) {
-      print("endTrip error: $e");
+      debugPrint("endTrip error: $e");
       _isLoading = false;
       notifyListeners();
       return false;

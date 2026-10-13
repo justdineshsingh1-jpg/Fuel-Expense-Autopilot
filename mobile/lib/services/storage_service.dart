@@ -8,26 +8,20 @@ class StorageService {
 
   Future<String> uploadImage(File imageFile) async {
     try {
-      // Mock implementation
-      await Future.delayed(const Duration(seconds: 1));
-      return 'https://mock-image-url.com/${DateTime.now().millisecondsSinceEpoch}.jpg';
-      
-      /* Actual implementation
-      String fileName = imageFile.path.split('/').last;
+      String fileName = imageFile.path.split(Platform.pathSeparator).last;
       FormData formData = FormData.fromMap({
         "file": await MultipartFile.fromFile(imageFile.path, filename: fileName),
       });
 
       final response = await _apiService.client.post(
-        ApiConfig.uploadImage,
+        ApiConfig.upload,
         data: formData,
       );
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 && response.data != null && response.data['url'] != null) {
         return response.data['url'];
       }
-      throw Exception('Failed to upload image');
-      */
+      throw Exception('Failed to upload image: Invalid response');
     } catch (e) {
       throw Exception('Upload failed: $e');
     }

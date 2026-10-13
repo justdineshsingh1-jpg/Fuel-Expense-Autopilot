@@ -15,7 +15,7 @@ export default function HistoryPage() {
 
   React.useEffect(() => {
     if (!user) return;
-    fetch('https://fuel-expense-autopilot.vercel.app/api/trips')
+    fetch('/api/trips')
       .then(r => r.json())
       .then(data => {
         if (Array.isArray(data)) {
@@ -24,18 +24,24 @@ export default function HistoryPage() {
           
           // Map DB structure to UI structure
           const formatted = myTrips.map(t => {
-            const distance = ((t.end_reading || 0) - (t.start_reading || 0)).toFixed(1);
+            const startR = Number(t.start_reading || 0);
+            const endR = Number(t.end_reading || startR);
+            const distance = (t.distance_km !== null && t.distance_km !== undefined) 
+              ? Number(t.distance_km).toFixed(1) 
+              : (endR >= startR ? (endR - startR).toFixed(1) : '0.0');
+            const totalAmount = (Number(t.fuel_amount) || 0) + (Number(t.misc_amount) || 0);
+
             return {
               id: t.id,
               date: t.created_at || t.start_capture_timestamp || new Date().toISOString(),
               status: t.approval_status || 'pending',
               locations: t.locations_visited || 'Route tracking completed.',
-              distance: Number(distance) > 0 ? distance : '0.0',
-              fuelAmount: t.fuel_amount || 0,
+              distance: distance,
+              fuelAmount: totalAmount,
               startTime: t.start_capture_timestamp ? new Date(t.start_capture_timestamp).toLocaleTimeString('en-IN', {hour: '2-digit', minute:'2-digit'}) : 'N/A',
               endTime: t.created_at ? new Date(t.created_at).toLocaleTimeString('en-IN', {hour: '2-digit', minute:'2-digit'}) : 'N/A',
               mapImage: t.map_history_url || 'https://images.unsplash.com/photo-1524661135-423995f22d0b?w=800&q=80',
-              odometerImage: t.end_odometer_url || t.start_odometer_url || 'https://images.unsplash.com/photo-1599423689404-5154ee0d2023?w=400&q=80'
+              odometerImage: t.end_odometer_image_url || t.start_odometer_image_url || 'https://images.unsplash.com/photo-1599423689404-5154ee0d2023?w=400&q=80'
             };
           });
           setHistoryData(formatted);

@@ -63,7 +63,7 @@ class OfflineSyncService {
                 'file': await MultipartFile.fromFile(file.path, filename: 'upload.jpg')
               });
               var response = await apiService.client.post(
-                '/upload', 
+                ApiConfig.upload, 
                 data: formData
               );
               if (response.statusCode == 200 && response.data != null && response.data['url'] != null) {
