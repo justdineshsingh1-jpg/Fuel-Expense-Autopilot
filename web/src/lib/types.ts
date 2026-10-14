@@ -10,23 +10,50 @@ export type User = {
   reportingTo?: string;
 };
 
-export type ApprovalStatus = 'draft' | 'pending' | 'approved' | 'rejected' | 'flagged';
+export type ApprovalStatus = 
+  | 'draft' 
+  | 'active'
+  | 'pending' 
+  | 'submitted'
+  | 'auto_validated'
+  | 'supervisor_approved' 
+  | 'manager_approved' 
+  | 'md_approved' 
+  | 'finance_settled' 
+  | 'approved' 
+  | 'rejected' 
+  | 'returned' 
+  | 'flagged' 
+  | 'abandoned';
+
+export type ValidationStatus = 'clean' | 'exception' | 'incomplete';
 
 export type TripLog = {
   id: string;
   userId: string;
   employeeName: string;
+  employeeCode?: string;
+  department?: string;
+  vehicleNumber?: string;
+  project?: string;
   date: string; // ISO format
+  logDate?: string;
   route: string;
+  startReading: number;
+  endReading: number;
   distanceKm: number;
   claimedKm: number;
   osrmKm: number;
   variancePercentage: number;
   fuelAmount: number;
+  miscAmount?: number;
+  totalAmount?: number;
   status: ApprovalStatus;
+  validationStatus?: ValidationStatus;
   startOdometerPhotoUrl?: string;
   endOdometerPhotoUrl?: string;
   fuelBillPhotoUrl?: string;
+  miscBillPhotoUrl?: string;
   clientVisits: ClientVisit[];
   fraudFlags: FraudFlag[];
   waypoints: string[];
@@ -40,7 +67,7 @@ export type ClientVisit = {
   location: string;
 };
 
-export type FlagSeverity = 'low' | 'medium' | 'high';
+export type FlagSeverity = 'low' | 'medium' | 'high' | 'critical';
 
 export type FraudFlag = {
   id: string;
@@ -51,15 +78,17 @@ export type FraudFlag = {
   executiveExplanation?: string;
   tripDate: string;
   employeeName: string;
+  tripId?: string;
 };
 
 export type ApprovalAudit = {
   id: string;
-  action: 'submitted' | 'approved' | 'rejected' | 'flagged' | 'returned';
+  action: 'submitted' | 'auto_validated' | 'supervisor_approved' | 'manager_approved' | 'md_approved' | 'finance_settled' | 'approved' | 'rejected' | 'flagged' | 'returned' | 'escalated';
   actorName: string;
-  actorRole: Role;
+  actorRole: Role | 'system';
   timestamp: string;
   comments?: string;
+  amount?: number;
 };
 
 export type AccountExportRecord = {

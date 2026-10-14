@@ -68,7 +68,11 @@ export async function GET(request: Request) {
       query = query.eq('user_id', userId);
     }
     if (status && status !== 'all') {
-      query = query.eq('approval_status', status);
+      if (status.includes(',')) {
+        query = query.in('approval_status', status.split(',').map((s: string) => s.trim()));
+      } else {
+        query = query.eq('approval_status', status);
+      }
     }
 
     const { data, error } = await query;
@@ -332,6 +336,7 @@ export async function POST(request: Request) {
         survey_cluster_km: surveyKm,
         variance_percent: variancePercent,
         fraud_flags: fraudFlags,
+        has_anomalies: fraudFlags.length > 0,
         approval_status: 'pending',
         submitted_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
