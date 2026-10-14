@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import dynamic from 'next/dynamic';
+import { calculateHaversineDistance } from '@/components/ui/RouteMap';
 
 const RouteMap = dynamic(() => import('@/components/ui/RouteMap'), { ssr: false });
 
@@ -117,7 +118,22 @@ export default function ApprovalDetailPage() {
     ? Number(trip.distance_km) 
     : (endReading >= startReading ? (endReading - startReading) : 0);
   const totalAmountClaimed = (Number(trip.fuel_amount) || 0) + (Number(trip.misc_amount) || 0);
-  const variance = trip.variance_percent || 0;
+
+  // Calculate actual GPS polyline distance directly from waypoints
+  const mapPolylineKm = waypoints && waypoints.length >= 2 ? calculateHaversineDistance(waypoints) : 0;
+  
+  // Best available ground-truth distance from map/road routing
+  const mapTruthKm = (trip.osrm_calculated_km && Number(trip.osrm_calculated_km) > 0)
+    ? Number(trip.osrm_calculated_km)
+    : (trip.osrm_distance_km && Number(trip.osrm_distance_km) > 0)
+      ? Number(trip.osrm_distance_km)
+      : mapPolylineKm;
+
+  // Real variance calculated against actual map distance
+  const variance = mapTruthKm > 0
+    ? Number((((claimedKm - mapTruthKm) / mapTruthKm) * 100).toFixed(1))
+    : Number((trip.variance_percent || 0).toFixed(1));
+
   const flags = trip.fraud_flags || [];
 
   return (
@@ -170,21 +186,25 @@ export default function ApprovalDetailPage() {
                   <p className="text-xs text-gray-500">{trip.users?.employee_code || trip.user_id.substring(0, 6)} • {trip.users?.department || 'Operations'}</p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-500 mb-1">Total Distance</p>
+                  <p className="text-sm font-medium text-gray-500 mb-1">Total Distance (Claimed)</p>
                   <p className="font-bold text-gray-900 text-lg">
                     {isTripActive ? 'Tracking Live...' : `${claimedKm.toFixed(1)} KM`}
                   </p>
-                  <p className="text-xs text-gray-500">
-                    {isTripActive ? `Start: ${startReading} KM` : `OSRM: ${(trip.osrm_calculated_km || trip.osrm_distance_km || 0).toFixed(1)} KM`}
+                  <p className="text-xs text-sky-600 font-medium">
+                    {isTripActive 
+                      ? `Start: ${startReading} KM` 
+                      : mapTruthKm > 0 
+                        ? `Map Route: ${mapTruthKm.toFixed(1)} KM` 
+                        : `Start: ${startReading} KM`}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-gray-500 mb-1">Route Variance</p>
-                  <p className={cn("font-bold text-lg", variance > 15 ? "text-red-600" : "text-green-600")}>
-                    {isTripActive ? 'Calculating...' : `${variance.toFixed(1)}%`}
+                  <p className={cn("font-bold text-lg", Math.abs(variance) > 18 ? "text-red-600" : "text-green-600")}>
+                    {isTripActive ? 'Calculating...' : `${variance > 0 ? '+' : ''}${variance}%`}
                   </p>
                   <p className="text-xs text-gray-500">
-                    {isTripActive ? 'Pending End Leg' : (variance <= 15 ? 'Within limits' : 'Needs review')}
+                    {isTripActive ? 'Pending End Leg' : (Math.abs(variance) <= 18 ? 'Within limits' : 'Needs review (Discrepancy)')}
                   </p>
                 </div>
                 <div>
@@ -291,14 +311,25 @@ export default function ApprovalDetailPage() {
         <div className="space-y-6">
           <Card>
             <CardHeader className="border-b border-gray-100 bg-gray-50/50">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <MapPin className="h-5 w-5 text-gray-500" /> GPS Route Map
+              <CardTitle className="text-lg flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <MapPin className="h-5 w-5 text-gray-500" /> GPS Route Map
+                </span>
+                {mapPolylineKm > 0 && (
+                  <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-sky-100 text-sky-800">
+                    {mapPolylineKm.toFixed(1)} KM Track
+                  </span>
+                )}
               </CardTitle>
             </CardHeader>
             <CardBody className="p-4">
-              <div className="bg-gray-100 rounded-md h-64 mb-4 border border-gray-200 overflow-hidden relative z-0">
+              <div className="bg-gray-100 rounded-md h-64 mb-3 border border-gray-200 overflow-hidden relative z-0">
                 {waypoints.length > 0 ? (
-                  <RouteMap waypoints={waypoints} distanceKm={claimedKm > 0 ? claimedKm : (trip?.osrm_calculated_km ?? undefined)} />
+                  <RouteMap 
+                    waypoints={waypoints} 
+                    claimedDistanceKm={claimedKm} 
+                    osrmDistanceKm={trip?.osrm_calculated_km || trip?.osrm_distance_km} 
+                  />
                 ) : (
                   <div className="h-full flex flex-col items-center justify-center text-gray-500 p-4 text-center">
                     <MapPin className="h-8 w-8 text-gray-400 mb-2" />
@@ -306,9 +337,29 @@ export default function ApprovalDetailPage() {
                   </div>
                 )}
               </div>
+
               {waypoints.length > 0 && (
-                <div className="text-xs text-gray-500 mt-2 text-center">
-                  Showing {waypoints.length} GPS pings recorded during the trip.
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-slate-500 block text-[11px]">Map Route (Polyline)</span>
+                      <strong className="text-sky-600 text-sm">{mapPolylineKm > 0 ? `${mapPolylineKm.toFixed(1)} KM` : 'Calculating...'}</strong>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-slate-500 block text-[11px]">Odometer Claimed</span>
+                      <strong className="text-slate-800 text-sm">{claimedKm.toFixed(1)} KM</strong>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-slate-500 block text-[11px]">Discrepancy</span>
+                      <strong className={Math.abs(claimedKm - mapPolylineKm) > (mapPolylineKm * 0.18) ? "text-red-600 text-sm" : "text-emerald-600 text-sm"}>
+                        {claimedKm > mapPolylineKm ? '+' : ''}{(claimedKm - mapPolylineKm).toFixed(1)} KM
+                      </strong>
+                    </div>
+                  </div>
+                  <div className="border-t border-slate-200/60 pt-1.5 flex items-center justify-between text-[11px] text-slate-500">
+                    <span>{waypoints.length} GPS pings recorded during trip</span>
+                    <span className="text-sky-600 font-medium">Click line on map for popup</span>
+                  </div>
                 </div>
               )}
             </CardBody>

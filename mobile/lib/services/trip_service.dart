@@ -13,7 +13,7 @@ class TripService {
   static const String _tripsCacheKey = 'cached_trips_history_json';
 
   Future<List<TripLog>> getTrips({String? userId}) async {
-    // 1. Trigger background opportunistic sync without blocking UI fetch
+    // 1. Opportunistic background sync of pending offline trips
     _syncService.syncPendingTrips(_apiService).catchError((e) {
       debugPrint("Background sync error: $e");
       return false;
@@ -25,11 +25,25 @@ class TripService {
         queryParameters: userId != null && userId.isNotEmpty ? {'user_id': userId} : null,
       );
 
-      if (response.data != null && response.data is List) {
-        final list = (response.data as List).map((t) => _parseTripLog(t)).toList();
+      dynamic rawData = response.data;
+      if (rawData is String) {
+        try {
+          rawData = jsonDecode(rawData);
+        } catch (_) {}
+      }
+
+      if (rawData != null && rawData is List) {
+        final List<TripLog> list = [];
+        for (final item in rawData) {
+          try {
+            list.add(_parseTripLog(item));
+          } catch (itemErr) {
+            debugPrint("Error parsing single trip item: $itemErr");
+          }
+        }
         
         // Cache trips locally in background
-        _cacheTripsLocally(response.data as List);
+        _cacheTripsLocally(rawData);
         return list;
       }
     } catch (e) {
@@ -54,8 +68,18 @@ class TripService {
       final prefs = await SharedPreferences.getInstance();
       final str = prefs.getString(_tripsCacheKey);
       if (str != null && str.isNotEmpty) {
-        final list = jsonDecode(str) as List;
-        return list.map((t) => _parseTripLog(t)).toList();
+        final decoded = jsonDecode(str);
+        if (decoded is List) {
+          final List<TripLog> list = [];
+          for (final item in decoded) {
+            try {
+              list.add(_parseTripLog(item));
+            } catch (err) {
+              debugPrint("Error parsing cached trip item: $err");
+            }
+          }
+          return list;
+        }
       }
     } catch (e) {
       debugPrint("Error reading cached trips: $e");
@@ -74,51 +98,61 @@ class TripService {
         data: payload,
       );
       
-      final t = response.data;
-      return _parseTripLog(t);
+      dynamic rawData = response.data;
+      if (rawData is String) {
+        try {
+          rawData = jsonDecode(rawData);
+        } catch (_) {}
+      }
+      
+      if (rawData is Map) {
+        return _parseTripLog(rawData);
+      }
+      return _buildFallbackLocalTripLog(payload);
     } catch (e) {
       debugPrint("Network Error during saveTrip, queueing offline: $e");
-      // Queue offline for automatic sync
       await _syncService.enqueuePayload(payload);
-      
-      // Calculate distance safely
-      final startR = double.tryParse(payload['start_reading']?.toString() ?? '') ?? 0.0;
-      final endR = double.tryParse(payload['end_reading']?.toString() ?? '') ?? startR;
-      final dist = (endR > startR) ? (endR - startR) : 0.0;
-
-      // Return a reliable local trip log so the UI doesn't break
-      return TripLog(
-        id: payload['trip_id'] ?? ('offline_' + DateTime.now().millisecondsSinceEpoch.toString()),
-        employeeId: payload['user_id'] ?? '',
-        date: DateTime.now(),
-        startReading: startR,
-        startOdometerImageUrl: payload['start_odometer_image_url'] ?? '',
-        endReading: endR,
-        endOdometerImageUrl: payload['end_odometer_image_url'] ?? '',
-        distanceKm: dist,
-        locations: [],
-        fuelBill: (payload['fuel_bill_url'] != null && payload['fuel_bill_url'].toString().isNotEmpty)
-            ? FuelBill(
-                amount: double.tryParse(payload['fuel_amount']?.toString() ?? '') ?? 0,
-                imageUrl: payload['fuel_bill_url'] ?? '',
-                fuelType: 'Petrol',
-                remarks: '',
-              )
-            : null,
-        miscAmount: double.tryParse(payload['misc_amount']?.toString() ?? '') ?? 0.0,
-        miscBillUrl: payload['misc_bill_url'],
-        miscRemarks: payload['misc_particulars'] ?? '',
-        status: payload['approval_status'] ?? 'pending',
-        flags: [],
-      );
+      return _buildFallbackLocalTripLog(payload);
     }
   }
 
-  TripLog _parseTripLog(Map<String, dynamic> t) {
+  TripLog _buildFallbackLocalTripLog(Map<String, dynamic> payload) {
+    final startR = double.tryParse(payload['start_reading']?.toString() ?? '') ?? 0.0;
+    final endR = double.tryParse(payload['end_reading']?.toString() ?? '') ?? startR;
+    final dist = (endR > startR) ? (endR - startR) : 0.0;
+
+    return TripLog(
+      id: payload['trip_id']?.toString() ?? ('offline_${DateTime.now().millisecondsSinceEpoch}'),
+      employeeId: payload['user_id']?.toString() ?? '',
+      date: DateTime.now(),
+      startReading: startR,
+      startOdometerImageUrl: payload['start_odometer_image_url']?.toString() ?? '',
+      endReading: endR,
+      endOdometerImageUrl: payload['end_odometer_image_url']?.toString() ?? '',
+      distanceKm: dist,
+      locations: [],
+      fuelBill: (payload['fuel_bill_url'] != null && payload['fuel_bill_url'].toString().isNotEmpty)
+          ? FuelBill(
+              amount: double.tryParse(payload['fuel_amount']?.toString() ?? '') ?? 0.0,
+              imageUrl: payload['fuel_bill_url'].toString(),
+              fuelType: 'Petrol',
+              remarks: '',
+            )
+          : null,
+      miscAmount: double.tryParse(payload['misc_amount']?.toString() ?? '') ?? 0.0,
+      miscBillUrl: payload['misc_bill_url']?.toString(),
+      miscRemarks: payload['misc_particulars']?.toString() ?? '',
+      status: payload['approval_status']?.toString() ?? 'pending',
+      flags: [],
+    );
+  }
+
+  TripLog _parseTripLog(dynamic raw) {
+    final Map<String, dynamic> t = (raw is Map) ? Map<String, dynamic>.from(raw) : {};
+
     FuelBill? parsedFuelBill;
     final fuelAmt = double.tryParse(t['fuel_amount']?.toString() ?? '') ?? 0.0;
     final fuelUrl = t['fuel_bill_url']?.toString();
-    // Parse fuel bill whenever an image URL is present, or amount > 0
     if ((fuelUrl != null && fuelUrl.isNotEmpty) || fuelAmt > 0) {
       double? ocrAmt;
       if (t['ocr_data'] != null && t['ocr_data'] is Map && t['ocr_data']['detected_amount'] != null) {
@@ -144,21 +178,27 @@ class TripService {
       dist = endR - startR;
     }
 
+    final rawDateStr = t['created_at']?.toString() ?? t['log_date']?.toString();
+    DateTime parsedDate = DateTime.now();
+    if (rawDateStr != null && rawDateStr.isNotEmpty) {
+      parsedDate = DateTime.tryParse(rawDateStr) ?? DateTime.now();
+    }
+
     return TripLog(
       id: t['id']?.toString(),
-      employeeId: t['user_id'] ?? '',
-      date: DateTime.tryParse(t['created_at'] ?? t['log_date'] ?? '') ?? DateTime.now(),
+      employeeId: t['user_id']?.toString() ?? '',
+      date: parsedDate,
       startReading: startR,
-      startOdometerImageUrl: t['start_odometer_image_url'] ?? '',
+      startOdometerImageUrl: t['start_odometer_image_url']?.toString() ?? '',
       endReading: endR,
-      endOdometerImageUrl: t['end_odometer_image_url'] ?? '',
+      endOdometerImageUrl: t['end_odometer_image_url']?.toString() ?? '',
       distanceKm: dist,
       locations: [],
       fuelBill: parsedFuelBill,
       miscAmount: miscAmt,
       miscBillUrl: (miscUrl != null && miscUrl.isNotEmpty) ? miscUrl : null,
       miscRemarks: miscRemarks,
-      status: t['approval_status'] ?? 'pending',
+      status: t['approval_status']?.toString() ?? 'pending',
       flags: [],
     );
   }

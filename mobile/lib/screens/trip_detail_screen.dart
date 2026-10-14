@@ -47,7 +47,7 @@ class TripDetailScreen extends StatelessWidget {
                   title: Text(flag.type, style: const TextStyle(fontWeight: FontWeight.bold)),
                   subtitle: Text(flag.description),
                 ),
-              )).toList(),
+              )),
               const SizedBox(height: 24),
             ],
 
@@ -109,7 +109,7 @@ class TripDetailScreen extends StatelessWidget {
                 subtitle: Text('${loc.purpose}\n${DateFormat('HH:mm a').format(loc.timestamp)}'),
                 isThreeLine: true,
               );
-            }).toList(),
+            }),
             const Divider(height: 32),
 
             // Fuel Bills

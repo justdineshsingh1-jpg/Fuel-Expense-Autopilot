@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../models/trip_log.dart';
 import '../providers/trip_provider.dart';
 import '../widgets/status_badge.dart';
+import '../widgets/photo_thumbnail.dart';
 import 'trip_detail_screen.dart';
 
 class TripHistoryScreen extends StatefulWidget {
@@ -34,10 +35,10 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
     if (_selectedFilter == 'This Week') {
       final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
       final startOfDay = DateTime(startOfWeek.year, startOfWeek.month, startOfWeek.day);
-      return allTrips.where((t) => t.date.isAfter(startOfDay)).toList();
+      return allTrips.where((t) => t.date.isAfter(startOfDay) || (t.date.year == startOfDay.year && t.date.month == startOfDay.month && t.date.day == startOfDay.day)).toList();
     } else if (_selectedFilter == 'This Month') {
       final startOfMonth = DateTime(now.year, now.month, 1);
-      return allTrips.where((t) => t.date.isAfter(startOfMonth)).toList();
+      return allTrips.where((t) => t.date.isAfter(startOfMonth) || (t.date.year == startOfMonth.year && t.date.month == startOfMonth.month)).toList();
     }
     return allTrips;
   }
@@ -45,33 +46,40 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Trip History')),
+      backgroundColor: Colors.grey[50],
+      appBar: AppBar(
+        title: const Text('Trip History', style: TextStyle(fontWeight: FontWeight.bold)),
+        elevation: 0,
+      ),
       body: Column(
         children: [
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
+          Container(
+            color: Colors.white,
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: Row(
-              children: _filters.map((filter) {
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
-                  child: FilterChip(
-                    label: Text(filter),
-                    selected: _selectedFilter == filter,
-                    selectedColor: const Color(0xFF1D5BB5).withOpacity(0.15),
-                    checkmarkColor: const Color(0xFF1D5BB5),
-                    labelStyle: TextStyle(
-                      color: _selectedFilter == filter ? const Color(0xFF1D5BB5) : Colors.black87,
-                      fontWeight: _selectedFilter == filter ? FontWeight.bold : FontWeight.normal,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: _filters.map((filter) {
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: FilterChip(
+                      label: Text(filter),
+                      selected: _selectedFilter == filter,
+                      selectedColor: const Color(0xFF1D5BB5).withOpacity(0.15),
+                      checkmarkColor: const Color(0xFF1D5BB5),
+                      labelStyle: TextStyle(
+                        color: _selectedFilter == filter ? const Color(0xFF1D5BB5) : Colors.black87,
+                        fontWeight: _selectedFilter == filter ? FontWeight.bold : FontWeight.normal,
+                      ),
+                      onSelected: (selected) {
+                        setState(() {
+                          _selectedFilter = filter;
+                        });
+                      },
                     ),
-                    onSelected: (selected) {
-                      setState(() {
-                        _selectedFilter = filter;
-                      });
-                    },
-                  ),
-                );
-              }).toList(),
+                  );
+                }).toList(),
+              ),
             ),
           ),
           Expanded(
@@ -150,29 +158,46 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                                     StatusBadge(status: trip.status),
                                   ],
                                 ),
-                                const Divider(height: 20),
+                                const Divider(height: 18),
                                 Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          isShiftActive ? 'Shift In Progress' : 'Distance: ${trip.distanceKm.toStringAsFixed(1)} KM',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 15,
-                                            color: isShiftActive ? Colors.orange.shade800 : Colors.black87,
+                                    if (trip.fuelBill?.imageUrl != null && trip.fuelBill!.imageUrl.isNotEmpty)
+                                      Padding(
+                                        padding: const EdgeInsets.only(right: 12),
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(8),
+                                          child: PhotoThumbnail(path: trip.fuelBill!.imageUrl, size: 54),
+                                        ),
+                                      )
+                                    else if (trip.startOdometerImageUrl.isNotEmpty)
+                                      Padding(
+                                        padding: const EdgeInsets.only(right: 12),
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(8),
+                                          child: PhotoThumbnail(path: trip.startOdometerImageUrl, size: 54),
+                                        ),
+                                      ),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            isShiftActive ? 'Shift In Progress' : 'Distance: ${trip.distanceKm.toStringAsFixed(1)} KM',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 15,
+                                              color: isShiftActive ? Colors.orange.shade800 : Colors.black87,
+                                            ),
                                           ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          isShiftActive 
-                                            ? 'Start: ${trip.startReading.toStringAsFixed(0)} KM'
-                                            : 'Reading: ${trip.startReading.toStringAsFixed(0)} → ${trip.endReading.toStringAsFixed(0)} KM',
-                                          style: const TextStyle(fontSize: 13, color: Colors.grey),
-                                        ),
-                                      ],
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            isShiftActive 
+                                              ? 'Start: ${trip.startReading.toStringAsFixed(0)} KM'
+                                              : 'Reading: ${trip.startReading.toStringAsFixed(0)} → ${trip.endReading.toStringAsFixed(0)} KM',
+                                            style: const TextStyle(fontSize: 13, color: Colors.grey),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                     if (totalExpense > 0)
                                       Container(

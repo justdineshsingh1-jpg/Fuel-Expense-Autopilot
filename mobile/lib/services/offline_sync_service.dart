@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dio/dio.dart';
 import 'dart:convert';
@@ -39,7 +40,7 @@ class OfflineSyncService {
         // 2. Submit the trip
         await apiService.client.post(ApiConfig.trips, data: payload);
       } catch (e) {
-        print('Sync Error for item: ' + e.toString());
+        debugPrint('Sync Error for item: $e');
         failedQueue.add(item);
         allSuccess = false;
       }
@@ -71,7 +72,7 @@ class OfflineSyncService {
               }
             }
           } catch (e) {
-            print("Image upload failed for field $field: $e");
+            debugPrint("Image upload failed for field $field: $e");
           }
         }
       }
