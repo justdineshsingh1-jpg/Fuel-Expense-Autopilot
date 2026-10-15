@@ -91,6 +91,18 @@ export default function AccountsPage() {
     });
 
     return Array.from(map.values()).map(item => {
+      // Benchmark fuel price (Rs 106 / Liter)
+      const FUEL_BENCHMARK_PRICE = 106;
+      const petrolUsageLiters = item.fuelAmount > 0 
+        ? Number((item.fuelAmount / FUEL_BENCHMARK_PRICE).toFixed(2)) 
+        : 0;
+
+      // Mileage = Total KM / (Fuel Bill / Fuel Price)
+      // e.g. 1000 KM / (2500 / 106) = 42.40 KM/L
+      const vehicleMileage = (petrolUsageLiters > 0 && item.totalKm > 0)
+        ? Number((item.totalKm / (item.fuelAmount / FUEL_BENCHMARK_PRICE)).toFixed(2))
+        : 0;
+
       // If fuel is not claimed directly, apply standard conveyance rate per KM
       // Otherwise conveyance is fuel + misc
       const kmReimbursement = Number((item.totalKm * VALIDATION_RULES.STANDARD_CONVEYANCE_RATE_PER_KM).toFixed(2));
@@ -101,6 +113,8 @@ export default function AccountsPage() {
       return {
         ...item,
         totalKm: Number(item.totalKm.toFixed(1)),
+        petrolUsageLiters,
+        vehicleMileage,
         kmReimbursement,
         totalPayable: Number(totalPayable.toFixed(2)),
         isFullySettled: item.pendingCount === 0 && item.settledCount > 0
@@ -185,7 +199,20 @@ export default function AccountsPage() {
       return;
     }
 
-    const headers = ['Month', 'Employee Code', 'Employee Name', 'Department', 'Trips Count', 'Total KM', 'Fuel Expenses (INR)', 'Misc Expenses (INR)', 'Total Payable (INR)', 'Status'];
+    const headers = [
+      'Month', 
+      'Employee Code', 
+      'Employee Name', 
+      'Department', 
+      'Trips Count', 
+      'Total KM', 
+      'Fuel Expenses (INR)', 
+      'Est. Petrol Usage (Liters @ Rs 106/L)', 
+      'Vehicle Mileage (KM/L)', 
+      'Misc Expenses (INR)', 
+      'Total Payable (INR)', 
+      'Status'
+    ];
     const rows = filteredRollups.map(r => [
       r.month,
       r.employeeCode,
@@ -194,6 +221,8 @@ export default function AccountsPage() {
       r.tripsCount,
       r.totalKm,
       r.fuelAmount,
+      r.petrolUsageLiters > 0 ? r.petrolUsageLiters : 'N/A',
+      r.vehicleMileage > 0 ? r.vehicleMileage : 'N/A',
       r.miscAmount,
       r.totalPayable,
       r.isFullySettled ? 'SETTLED' : 'PENDING SETTLEMENT'
@@ -207,7 +236,7 @@ export default function AccountsPage() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    toast.success('Downloaded reconciliation statement!');
+    toast.success('Downloaded reconciliation statement with mileage!');
   };
 
   // Top KPI calculations
@@ -350,7 +379,7 @@ export default function AccountsPage() {
           <table className="w-full text-sm text-left">
             <thead className="bg-gray-50 border-b border-gray-200 text-gray-700">
               <tr>
-                <th className="px-4 py-3 w-10">
+                <th className="px-3 py-3 w-8">
                   <input 
                     type="checkbox" 
                     className="rounded border-gray-300 text-primary focus:ring-primary" 
@@ -358,35 +387,37 @@ export default function AccountsPage() {
                     onChange={toggleSelectAll} 
                   />
                 </th>
-                <th className="px-4 py-3 font-medium">Month</th>
-                <th className="px-4 py-3 font-medium">Employee / Code</th>
-                <th className="px-4 py-3 font-medium">Department</th>
-                <th className="px-4 py-3 font-medium text-center">Trips</th>
-                <th className="px-4 py-3 font-medium">Total Distance</th>
-                <th className="px-4 py-3 font-medium">Fuel Expenses</th>
-                <th className="px-4 py-3 font-medium">Misc Expenses</th>
-                <th className="px-4 py-3 font-medium">Total Payable</th>
-                <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-3 py-3 font-medium">Month</th>
+                <th className="px-3 py-3 font-medium">Employee / Code</th>
+                <th className="px-3 py-3 font-medium">Department</th>
+                <th className="px-2 py-3 font-medium text-center">Trips</th>
+                <th className="px-3 py-3 font-medium">Distance</th>
+                <th className="px-3 py-3 font-medium">Fuel Bill</th>
+                <th className="px-3 py-3 font-medium">Petrol Usage</th>
+                <th className="px-3 py-3 font-medium text-center">Mileage</th>
+                <th className="px-3 py-3 font-medium">Total Payable</th>
+                <th className="px-3 py-3 font-medium">Status</th>
+                <th className="px-3 py-3 font-medium text-center">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-gray-500">
+                  <td colSpan={12} className="py-12 text-center text-gray-500">
                     <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full mx-auto mb-2"></div>
-                    Calculating monthly employee conveyance rollups...
+                    Calculating monthly employee conveyance rollups & vehicle mileages...
                   </td>
                 </tr>
               ) : filteredRollups.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-gray-500">
+                  <td colSpan={12} className="py-12 text-center text-gray-500">
                     No approved claims pending finance settlement for this filter.
                   </td>
                 </tr>
               ) : (
                 filteredRollups.map((row) => (
                   <tr key={row.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3">
                       <input 
                         type="checkbox" 
                         className="rounded border-gray-300 text-primary focus:ring-primary" 
@@ -395,29 +426,59 @@ export default function AccountsPage() {
                         disabled={row.isFullySettled}
                       />
                     </td>
-                    <td className="px-4 py-3 font-semibold text-gray-800">{row.month}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3 font-semibold text-gray-800 whitespace-nowrap">{row.month}</td>
+                    <td className="px-3 py-3">
                       <span className="font-bold text-gray-900 block">{row.employeeName}</span>
                       <span className="text-xs text-gray-400 font-mono">{row.employeeCode}</span>
                     </td>
-                    <td className="px-4 py-3 text-gray-600">{row.department}</td>
-                    <td className="px-4 py-3 text-center">
+                    <td className="px-3 py-3 text-gray-600 text-xs">{row.department}</td>
+                    <td className="px-2 py-3 text-center">
                       <span className="bg-slate-100 text-slate-800 text-xs px-2 py-0.5 rounded-full font-bold">
                         {row.tripsCount}
                       </span>
                     </td>
-                    <td className="px-4 py-3 font-bold text-gray-900">{row.totalKm} KM</td>
-                    <td className="px-4 py-3">{formatCurrency(row.fuelAmount)}</td>
-                    <td className="px-4 py-3">{formatCurrency(row.miscAmount)}</td>
-                    <td className="px-4 py-3 font-extrabold text-emerald-700 text-base">
+                    <td className="px-3 py-3 font-bold text-gray-900 whitespace-nowrap">{row.totalKm} KM</td>
+                    <td className="px-3 py-3 whitespace-nowrap">{formatCurrency(row.fuelAmount)}</td>
+                    <td className="px-3 py-3 whitespace-nowrap">
+                      {row.petrolUsageLiters > 0 ? (
+                        <div>
+                          <span className="font-bold text-sky-700">{row.petrolUsageLiters} L</span>
+                          <span className="text-[10px] text-gray-400 block">@ ₹106/L</span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400">-</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 text-center whitespace-nowrap">
+                      {row.vehicleMileage > 0 ? (
+                        <span className={cn(
+                          "px-2 py-0.5 rounded-full text-xs font-extrabold",
+                          row.vehicleMileage >= 35 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
+                        )}>
+                          {row.vehicleMileage} KM/L
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-400">N/A</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 font-extrabold text-emerald-700 whitespace-nowrap">
                       {formatCurrency(row.totalPayable)}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3 whitespace-nowrap">
                       {row.isFullySettled ? (
                         <Badge variant="finance_settled">Settled</Badge>
                       ) : (
                         <Badge variant="warning">Pending Settlement</Badge>
                       )}
+                    </td>
+                    <td className="px-3 py-3 text-center whitespace-nowrap">
+                      <button
+                        onClick={() => window.open(`/api/reports/monthly-conveyance?userId=${row.userId}&month=${row.month}&fuelPrice=106`, '_blank')}
+                        className="text-xs font-semibold px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded shadow-xs transition-colors"
+                        title="View Official Conveyance & Fuel Mileage Sheet"
+                      >
+                        📄 Sheet
+                      </button>
                     </td>
                   </tr>
                 ))

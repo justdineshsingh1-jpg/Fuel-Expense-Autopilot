@@ -283,9 +283,16 @@ export default function ApprovalsPage() {
   };
 
   const downloadMonthlyReport = () => {
-    const userId = trips.length > 0 ? trips[0].userId : 'ALL';
+    let targetUserId = 'ALL';
+    if (selectedRows.size > 0) {
+      const selectedId = Array.from(selectedRows)[0];
+      const selectedTrip = trips.find(t => t.id === selectedId);
+      if (selectedTrip) targetUserId = selectedTrip.userId;
+    } else if (trips.length > 0) {
+      targetUserId = trips[0].userId;
+    }
     const month = new Date().toISOString().substring(0, 7);
-    window.open(`/api/reports/monthly-conveyance?userId=${userId}&month=${month}`, '_blank');
+    window.open(`/api/reports/monthly-conveyance?userId=${targetUserId}&month=${month}&fuelPrice=106`, '_blank');
   };
 
   // Filter trips based on active tab and search query
@@ -997,12 +1004,22 @@ export default function ApprovalsPage() {
                                   </div>
                                 )}
 
-                                <div className="mt-4 pt-4 border-t border-gray-200 flex justify-between items-center">
-                                  <Link href={`/approvals/${row.id}`}>
-                                    <Button variant="outline" size="sm" className="text-xs">
-                                      View Map & Full Timeline →
+                                <div className="mt-4 pt-4 border-t border-gray-200 flex flex-wrap justify-between items-center gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <Link href={`/approvals/${row.id}`}>
+                                      <Button variant="outline" size="sm" className="text-xs">
+                                        View Map & Full Timeline →
+                                      </Button>
+                                    </Link>
+                                    <Button 
+                                      variant="outline" 
+                                      size="sm" 
+                                      className="text-xs text-sky-700 hover:bg-sky-50"
+                                      onClick={() => window.open(`/api/reports/monthly-conveyance?userId=${row.userId}&month=${row.date ? row.date.substring(0, 7) : new Date().toISOString().substring(0, 7)}&fuelPrice=106`, '_blank')}
+                                    >
+                                      📄 Monthly Sheet & Mileage
                                     </Button>
-                                  </Link>
+                                  </div>
 
                                   <div className="flex gap-2">
                                     <Button 
