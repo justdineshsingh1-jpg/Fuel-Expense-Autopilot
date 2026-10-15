@@ -407,16 +407,16 @@ export async function GET(request: Request) {
           <!-- SIGNATURE AUDIT BLOCKS -->
           <div class="signatures-container">
             <div class="sign-col">
-              Employee Signature<br/>
-              <span style="font-size: 10px; font-weight: normal; color: #555;">(${employeeName})</span>
+              Verified by TL<br/>
+              <span style="font-size: 10px; font-weight: normal; color: #555;">(Team Leader)</span>
             </div>
             <div class="sign-col">
-              Verified by Supervisor<br/>
-              <span style="font-size: 10px; font-weight: normal; color: #555;">(Checked Odometer & GPS)</span>
+              Verified by Manager<br/>
+              <span style="font-size: 10px; font-weight: normal; color: #555;">(Operations Manager)</span>
             </div>
             <div class="sign-col">
-              Approved by Accounts / MD<br/>
-              <span style="font-size: 10px; font-weight: normal; color: #555;">(Sanctioned for Payment)</span>
+              Approved by MD<br/>
+              <span style="font-size: 10px; font-weight: normal; color: #555;">(Managing Director)</span>
             </div>
           </div>
 
