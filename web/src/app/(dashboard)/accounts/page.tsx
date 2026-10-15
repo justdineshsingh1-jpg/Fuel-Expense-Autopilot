@@ -57,7 +57,9 @@ export default function AccountsPage() {
 
       const startR = Number(t.start_reading || 0);
       const endR = Number(t.end_reading || startR);
+      const appDist = Number(t.osrm_calculated_km || t.osrm_distance_km || 0);
       const dist = t.distance_km !== null ? Number(t.distance_km) : (endR >= startR ? endR - startR : 0);
+      const validAppDist = appDist > 0 ? appDist : dist;
       const fuel = Number(t.fuel_amount) || 0;
       const misc = Number(t.misc_amount) || 0;
       const isSettled = status === 'finance_settled';
@@ -73,6 +75,7 @@ export default function AccountsPage() {
           tripIds: [t.id],
           tripsCount: 1,
           totalKm: dist,
+          totalAppKm: validAppDist,
           fuelAmount: fuel,
           miscAmount: misc,
           settledCount: isSettled ? 1 : 0,
@@ -83,6 +86,7 @@ export default function AccountsPage() {
         item.tripIds.push(t.id);
         item.tripsCount += 1;
         item.totalKm += dist;
+        item.totalAppKm += validAppDist;
         item.fuelAmount += fuel;
         item.miscAmount += misc;
         if (isSettled) item.settledCount += 1;
@@ -97,10 +101,16 @@ export default function AccountsPage() {
         ? Number((item.fuelAmount / FUEL_BENCHMARK_PRICE).toFixed(2)) 
         : 0;
 
-      // Mileage = Total KM / (Fuel Bill / Fuel Price)
+      // Odometer Mileage = Total KM / (Fuel Bill / Fuel Price)
       // e.g. 1000 KM / (2500 / 106) = 42.40 KM/L
       const vehicleMileage = (petrolUsageLiters > 0 && item.totalKm > 0)
         ? Number((item.totalKm / (item.fuelAmount / FUEL_BENCHMARK_PRICE)).toFixed(2))
+        : 0;
+
+      // App Tracked Mileage = App Total KM / (Fuel Bill / Fuel Price)
+      // e.g. 950 KM / (2500 / 106) = 40.27 KM/L
+      const appMileage = (petrolUsageLiters > 0 && item.totalAppKm > 0)
+        ? Number((item.totalAppKm / (item.fuelAmount / FUEL_BENCHMARK_PRICE)).toFixed(2))
         : 0;
 
       // If fuel is not claimed directly, apply standard conveyance rate per KM
@@ -113,8 +123,10 @@ export default function AccountsPage() {
       return {
         ...item,
         totalKm: Number(item.totalKm.toFixed(1)),
+        totalAppKm: Number(item.totalAppKm.toFixed(1)),
         petrolUsageLiters,
         vehicleMileage,
+        appMileage,
         kmReimbursement,
         totalPayable: Number(totalPayable.toFixed(2)),
         isFullySettled: item.pendingCount === 0 && item.settledCount > 0
@@ -205,10 +217,12 @@ export default function AccountsPage() {
       'Employee Name', 
       'Department', 
       'Trips Count', 
-      'Total KM', 
+      'Odometer Distance (KM)', 
+      'App GPS Distance (KM)', 
       'Fuel Expenses (INR)', 
       'Est. Petrol Usage (Liters @ Rs 106/L)', 
-      'Vehicle Mileage (KM/L)', 
+      'Odometer Mileage (KM/L)', 
+      'App GPS Mileage (KM/L)', 
       'Misc Expenses (INR)', 
       'Total Payable (INR)', 
       'Status'
@@ -220,9 +234,11 @@ export default function AccountsPage() {
       `"${r.department}"`,
       r.tripsCount,
       r.totalKm,
+      r.totalAppKm,
       r.fuelAmount,
       r.petrolUsageLiters > 0 ? r.petrolUsageLiters : 'N/A',
       r.vehicleMileage > 0 ? r.vehicleMileage : 'N/A',
+      r.appMileage > 0 ? r.appMileage : 'N/A',
       r.miscAmount,
       r.totalPayable,
       r.isFullySettled ? 'SETTLED' : 'PENDING SETTLEMENT'
@@ -437,7 +453,10 @@ export default function AccountsPage() {
                         {row.tripsCount}
                       </span>
                     </td>
-                    <td className="px-3 py-3 font-bold text-gray-900 whitespace-nowrap">{row.totalKm} KM</td>
+                    <td className="px-3 py-3 whitespace-nowrap">
+                      <div className="font-bold text-gray-900">{row.totalKm} KM <span className="text-[10px] text-gray-500 font-normal">(Odo)</span></div>
+                      <div className="text-[11px] text-sky-700 font-medium">{row.totalAppKm} KM <span className="text-[10px] text-gray-400 font-normal">(App)</span></div>
+                    </td>
                     <td className="px-3 py-3 whitespace-nowrap">{formatCurrency(row.fuelAmount)}</td>
                     <td className="px-3 py-3 whitespace-nowrap">
                       {row.petrolUsageLiters > 0 ? (
@@ -451,12 +470,24 @@ export default function AccountsPage() {
                     </td>
                     <td className="px-3 py-3 text-center whitespace-nowrap">
                       {row.vehicleMileage > 0 ? (
-                        <span className={cn(
-                          "px-2 py-0.5 rounded-full text-xs font-extrabold",
-                          row.vehicleMileage >= 35 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
-                        )}>
-                          {row.vehicleMileage} KM/L
-                        </span>
+                        <div className="space-y-0.5">
+                          <div>
+                            <span className={cn(
+                              "px-1.5 py-0.5 rounded text-[11px] font-extrabold inline-block",
+                              row.vehicleMileage >= 35 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
+                            )}>
+                              {row.vehicleMileage} KM/L (Odo)
+                            </span>
+                          </div>
+                          <div>
+                            <span className={cn(
+                              "px-1.5 py-0.5 rounded text-[11px] font-extrabold inline-block",
+                              row.appMileage >= 35 ? "bg-sky-100 text-sky-800" : "bg-amber-100 text-amber-800"
+                            )}>
+                              {row.appMileage} KM/L (App)
+                            </span>
+                          </div>
+                        </div>
                       ) : (
                         <span className="text-xs text-gray-400">N/A</span>
                       )}
