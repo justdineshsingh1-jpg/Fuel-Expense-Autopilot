@@ -7,7 +7,23 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const userIdParam = searchParams.get('userId');
   const month = searchParams.get('month') || new Date().toISOString().substring(0, 7); // Format: YYYY-MM
-  const fuelPrice = Number(searchParams.get('fuelPrice')) || 106; // Standard Rs 106 / Liter
+  let fuelPrice = Number(searchParams.get('fuelPrice'));
+
+  if (!fuelPrice || isNaN(fuelPrice)) {
+    try {
+      const { data: configData } = await supabaseAdmin.storage
+        .from('fuel-receipts')
+        .download('config/fuel_settings.json');
+      if (configData) {
+        const text = await configData.text();
+        const conf = JSON.parse(text);
+        if (conf.fuel_price) fuelPrice = Number(conf.fuel_price);
+      }
+    } catch (e) {}
+  }
+  if (!fuelPrice || isNaN(fuelPrice)) {
+    fuelPrice = 106; // Default Rs 106 / Liter
+  }
 
   try {
     const startDate = `${month}-01`;

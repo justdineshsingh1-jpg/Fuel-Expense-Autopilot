@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
 import { Card, CardBody } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -9,7 +10,8 @@ import { formatCurrency, formatDate, cn } from '@/lib/utils';
 import { VALIDATION_RULES } from '@/lib/constants';
 import { 
   Search, CheckSquare, DownloadCloud, Server, DollarSign, 
-  CreditCard, RefreshCw, CheckCircle2, ChevronRight, FileSpreadsheet
+  CreditCard, RefreshCw, CheckCircle2, ChevronRight, FileSpreadsheet,
+  Fuel
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabaseAdmin as supabase } from '@/lib/supabaseAdmin';
@@ -20,6 +22,7 @@ export default function AccountsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [settlementFilter, setSettlementFilter] = useState<'pending' | 'settled' | 'all'>('pending');
+  const [configuredFuelPrice, setConfiguredFuelPrice] = useState<number>(106);
 
   const fetchTrips = async () => {
     try {
@@ -39,6 +42,12 @@ export default function AccountsPage() {
 
   useEffect(() => {
     fetchTrips();
+    fetch('/api/admin/fuel-price')
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.fuel_price) setConfiguredFuelPrice(Number(data.fuel_price));
+      })
+      .catch(() => {});
   }, []);
 
   // Aggregate trips by Employee & Month for reconciliation
@@ -95,8 +104,8 @@ export default function AccountsPage() {
     });
 
     return Array.from(map.values()).map(item => {
-      // Benchmark fuel price (Rs 106 / Liter)
-      const FUEL_BENCHMARK_PRICE = 106;
+      // Dynamic Benchmark fuel price configured from admin panel
+      const FUEL_BENCHMARK_PRICE = configuredFuelPrice || 106;
       const petrolUsageLiters = item.fuelAmount > 0 
         ? Number((item.fuelAmount / FUEL_BENCHMARK_PRICE).toFixed(2)) 
         : 0;
@@ -132,7 +141,7 @@ export default function AccountsPage() {
         isFullySettled: item.pendingCount === 0 && item.settledCount > 0
       };
     });
-  }, [trips]);
+  }, [trips, configuredFuelPrice]);
 
   // Filtered rows
   const filteredRollups = useMemo(() => {
@@ -272,6 +281,13 @@ export default function AccountsPage() {
         </div>
         
         <div className="flex flex-wrap items-center gap-2">
+          <Link href="/admin/fuel-settings">
+            <div className="bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer" title="Update petrol benchmark price in Admin Panel">
+              <Fuel className="h-3.5 w-3.5 text-amber-600" />
+              <span>Petrol Benchmark: ₹{configuredFuelPrice.toFixed(2)}/L (Update Rate)</span>
+            </div>
+          </Link>
+
           {selected.size > 0 && (
             <Button 
               onClick={handleProcessSettlement} 
@@ -504,7 +520,7 @@ export default function AccountsPage() {
                     </td>
                     <td className="px-3 py-3 text-center whitespace-nowrap">
                       <button
-                        onClick={() => window.open(`/api/reports/monthly-conveyance?userId=${row.userId}&month=${row.month}&fuelPrice=106`, '_blank')}
+                        onClick={() => window.open(`/api/reports/monthly-conveyance?userId=${row.userId}&month=${row.month}&fuelPrice=${configuredFuelPrice}`, '_blank')}
                         className="text-xs font-semibold px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded shadow-xs transition-colors"
                         title="View Official Conveyance & Fuel Mileage Sheet"
                       >

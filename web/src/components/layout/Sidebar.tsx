@@ -15,7 +15,8 @@ import {
   Users,
   Settings,
   ChevronLeft,
-  History
+  History,
+  Fuel
 } from 'lucide-react';
 
 export function Sidebar() {
@@ -57,6 +58,10 @@ export function Sidebar() {
   const baseItems = roleMenus[user.role] || [];
   const menuItems = [...baseItems];
   
+  if (user.role === 'managing_director' || user.role === 'accounts' || user.role === 'manager') {
+    menuItems.push({ name: 'Fuel & Rate Settings', href: '/admin/fuel-settings', icon: Fuel });
+  }
+
   if (user.role === 'managing_director') {
     menuItems.push({ name: 'User Management', href: '/admin/users', icon: Users });
   }
