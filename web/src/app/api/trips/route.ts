@@ -56,6 +56,21 @@ export async function GET(request: Request) {
     const userId = searchParams.get('user_id');
     const status = searchParams.get('status');
 
+    // Auto-expire stale active shifts older than 16 hours so they don't block user on subsequent days
+    if (userId) {
+      try {
+        const sixteenHoursAgo = new Date(Date.now() - 16 * 60 * 60 * 1000).toISOString();
+        await supabaseAdmin
+          .from('trip_logs')
+          .update({ approval_status: 'abandoned', updated_at: new Date().toISOString() })
+          .eq('user_id', userId)
+          .eq('approval_status', 'active')
+          .lt('created_at', sixteenHoursAgo);
+      } catch (e) {
+        console.warn("Could not auto-expire stale trips:", e);
+      }
+    }
+
     let query = supabaseAdmin
       .from('trip_logs')
       .select('*, users (full_name, employee_code, department)')
@@ -89,6 +104,39 @@ export async function POST(request: Request) {
     const body = await request.json();
     const tripTargetId = body.trip_id || body.id;
     
+    // ----------------------------------------------------
+    // 0. ABANDON / RESET SHIFT LOGIC
+    // ----------------------------------------------------
+    if (body.approval_status === 'abandoned') {
+      let targetId = tripTargetId;
+      const isUuid = targetId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetId);
+      if (!isUuid) targetId = null;
+
+      if (!targetId && body.user_id) {
+        const { data: activeTrips } = await supabaseAdmin
+          .from('trip_logs')
+          .select('id')
+          .eq('user_id', body.user_id)
+          .eq('approval_status', 'active')
+          .order('created_at', { ascending: false })
+          .limit(1);
+        if (activeTrips && activeTrips.length > 0) {
+          targetId = activeTrips[0].id;
+        }
+      }
+
+      if (targetId) {
+        const { data, error } = await supabaseAdmin
+          .from('trip_logs')
+          .update({ approval_status: 'abandoned', updated_at: new Date().toISOString() })
+          .eq('id', targetId)
+          .select();
+        if (error) throw error;
+        return NextResponse.json(data?.[0] || { status: 'abandoned' });
+      }
+      return NextResponse.json({ status: 'abandoned' });
+    }
+
     // ----------------------------------------------------
     // 1. ACTIVE SHIFT LOGIC (Start Shift or Live Expense)
     // ----------------------------------------------------
@@ -240,20 +288,44 @@ export async function POST(request: Request) {
         const transitPoints = body.waypoints.filter((w: any) => w.mode === 'transit' || !w.mode);
         const surveyPoints = body.waypoints.filter((w: any) => w.mode === 'survey');
 
-        // A. TRANSIT LEG -> OSRM Mapping
+        // A. TRANSIT LEG -> OSRM Mapping with Haversine Fallback
         if (transitPoints.length >= 2) {
           const sparseTransit = transitPoints.filter((_: any, i: number) => i % Math.ceil(transitPoints.length / 150) === 0);
           const coordsString = sparseTransit.map((pt: any) => `${pt.lng},${pt.lat}`).join(';');
           
           try {
             const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${coordsString}?overview=false`;
-            const osrmRes = await fetch(osrmUrl);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3500);
+            const osrmRes = await fetch(osrmUrl, { signal: controller.signal });
+            clearTimeout(timeoutId);
             const osrmData = await osrmRes.json();
             if (osrmData.code === 'Ok' && osrmData.routes?.length > 0) {
               transitKm = Number((osrmData.routes[0].distance / 1000).toFixed(2));
             }
           } catch (e) {
-            console.error("OSRM Transit Error:", e);
+            console.warn("OSRM Transit Error, using Haversine fallback:", e);
+          }
+
+          // If OSRM timed out, failed, or was blocked, calculate Haversine with 1.15 road curvature factor
+          if (transitKm === 0 && transitPoints.length >= 2) {
+            const R = 6371;
+            let rawTransit = 0;
+            for (let i = 1; i < transitPoints.length; i++) {
+              const p1 = transitPoints[i - 1];
+              const p2 = transitPoints[i];
+              const dLat = ((p2.lat - p1.lat) * Math.PI) / 180;
+              const dLon = ((p2.lng - p1.lng) * Math.PI) / 180;
+              const a =
+                Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos((p1.lat * Math.PI) / 180) *
+                  Math.cos((p2.lat * Math.PI) / 180) *
+                  Math.sin(dLon / 2) *
+                  Math.sin(dLon / 2);
+              const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+              rawTransit += R * c;
+            }
+            transitKm = Number((rawTransit * 1.15).toFixed(2));
           }
         }
 
@@ -325,11 +397,19 @@ export async function POST(request: Request) {
         }
       }
 
+      const calculatedFinalDistance = claimedDistance > 0 
+        ? claimedDistance 
+        : (osrmDistanceKm > 0 ? osrmDistanceKm : 0);
+
       const updateData: Record<string, any> = {
         end_reading: endReading,
         end_odometer_image_url: body.end_odometer_image_url || existingTrip?.end_odometer_image_url,
         end_capture_timestamp: body.end_capture_timestamp || new Date().toISOString(),
-        distance_km: claimedDistance,
+        start_lat: body.start_lat || existingTrip?.start_lat,
+        start_lng: body.start_lng || existingTrip?.start_lng,
+        end_lat: body.end_lat || existingTrip?.end_lat,
+        end_lng: body.end_lng || existingTrip?.end_lng,
+        distance_km: calculatedFinalDistance,
         osrm_calculated_km: osrmDistanceKm,
         osrm_distance_km: osrmDistanceKm,
         transit_km: transitKm,

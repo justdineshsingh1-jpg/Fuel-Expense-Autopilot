@@ -193,6 +193,48 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _showAbandonTripConfirmDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Reset Active Shift?'),
+          ],
+        ),
+        content: const Text(
+          'If yesterday\'s shift was not closed or you are unable to end it, this will safely close the previous shift and allow you to start a brand new shift for today.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEF4444)),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final messenger = ScaffoldMessenger.of(context);
+              messenger.showSnackBar(
+                const SnackBar(content: Text('Resetting shift...')),
+              );
+              await Provider.of<TripProvider>(context, listen: false).abandonActiveOrStaleTrip();
+              messenger.showSnackBar(
+                const SnackBar(
+                  content: Text('Shift reset successfully! You can now start today\'s shift.'),
+                  backgroundColor: Colors.green,
+                ),
+              );
+            },
+            child: const Text('Reset & Start Today', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showEndShiftModal(BuildContext context) {
     final TextEditingController endOdoController = TextEditingController();
     String? capturedImageUrl;
@@ -664,7 +706,16 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       Text('Hi, ${user?.fullName ?? "Executive"}', style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 4),
-                      const Text('Your trip is currently active.', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                      Text(
+                        tripProvider.isActiveTripStale 
+                          ? '⚠️ Unclosed shift from yesterday/earlier.' 
+                          : 'Your trip is currently active.', 
+                        style: TextStyle(
+                          color: tripProvider.isActiveTripStale ? Colors.amberAccent : Colors.white70, 
+                          fontSize: 14,
+                          fontWeight: tripProvider.isActiveTripStale ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
                       const SizedBox(height: 18),
                       SizedBox(
                         width: double.infinity,
@@ -679,6 +730,19 @@ class _HomeScreenState extends State<HomeScreen> {
                           },
                           icon: const Icon(Icons.stop, color: Colors.white),
                           label: const Text('END TRIP', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        onPressed: () => _showAbandonTripConfirmDialog(context),
+                        icon: const Icon(Icons.restart_alt, color: Colors.white70, size: 18),
+                        label: const Text(
+                          'Need to reset or start fresh today?',
+                          style: TextStyle(color: Colors.white70, fontSize: 12, decoration: TextDecoration.underline),
                         ),
                       ),
                     ],
