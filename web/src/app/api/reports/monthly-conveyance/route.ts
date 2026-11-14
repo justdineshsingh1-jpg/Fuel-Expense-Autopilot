@@ -61,10 +61,10 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'No trip records found for the requested period' }, { status: 404 });
     }
 
-    // Fetch user details for the header
+    // Fetch user details
     let employeeName = 'Field Executive';
     let employeeCode = targetUserId.substring(0, 6).toUpperCase();
-    let vehicleDetails = 'Yamaha FzS';
+    let vehicleDetails = 'Own Bike';
 
     const { data: userData } = await supabaseAdmin
       .from('users')
@@ -98,12 +98,29 @@ export async function GET(request: Request) {
     let totalMiscAmount = 0;
     let grandTotalAmount = 0;
 
-    let rowsHtml = '';
     const defaultMode = 'Cash/ Bike';
     const defaultPurpose = 'Official';
 
+    interface BillItem {
+      type: string;
+      date: string;
+      amount: number;
+      startReading: number;
+      endReading: number;
+      distance: number;
+      location: string;
+      imageUrl: string;
+    }
+
+    const billsList: BillItem[] = [];
+    let travelRowsHtml = '';
+    let expenseRowsHtml = '';
+
+    let firstDate = '';
+    let lastDate = '';
+
     if (logs && logs.length > 0) {
-      logs.forEach(log => {
+      for (const log of logs) {
         const startR = Number(log.start_reading || 0);
         const endR = Number(log.end_reading || startR);
         const claimedDist = log.distance_km !== null && log.distance_km !== undefined 
@@ -112,12 +129,10 @@ export async function GET(request: Request) {
 
         totalOdoKm += claimedDist > 0 ? claimedDist : 0;
         
-        // App GPS / OSRM tracked distance
         const appDist = Number(log.osrm_calculated_km || log.osrm_distance_km || 0);
         if (appDist > 0) {
           totalAppKm += appDist;
         } else if (claimedDist > 0) {
-          // If app distance wasn't recorded for this leg, use claimed
           totalAppKm += claimedDist;
         }
 
@@ -129,13 +144,60 @@ export async function GET(request: Request) {
         if (fuelLiters > 0) recordedFuelLiters += fuelLiters;
         if (miscCost > 0) totalMiscAmount += miscCost;
 
-        // Date formatter (DD-MM-YYYY)
+        // Date formatting (DD-MM-YYYY)
         const dateParts = log.log_date ? log.log_date.split('-') : [];
         const formattedDate = dateParts.length === 3 ? `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}` : log.log_date;
+        if (!firstDate) firstDate = formattedDate;
+        lastDate = formattedDate;
 
+        // Determine Location for this trip
+        let locString = (log.misc_particulars && !log.misc_particulars.includes('Ended via app'))
+          ? log.misc_particulars.trim()
+          : '';
+
+        // If not specified, try reading addresses from map_history JSON
+        if (!locString) {
+          try {
+            const { data: mapData } = await supabaseAdmin.storage
+              .from('fuel-receipts')
+              .download(`map_history/${log.id}.json`);
+            if (mapData) {
+              const text = await mapData.text();
+              const parsed = JSON.parse(text);
+              if (parsed.waypoints && Array.isArray(parsed.waypoints)) {
+                const addrs = parsed.waypoints
+                  .map((w: any) => w.address)
+                  .filter((a: any) => a && typeof a === 'string' && a.length > 2);
+                const unique = Array.from(new Set(addrs));
+                if (unique.length > 0) {
+                  locString = unique.slice(0, 4).join(', ');
+                }
+              }
+            }
+          } catch (_) {}
+        }
+
+        if (!locString) {
+          locString = 'Boragaon, Maligaon, Pandu, Field Operations';
+        }
+
+        // Section 1: Travel Log row
+        const fuelRemarkText = fuelCost > 0 ? `Fuel: Rs.${Math.round(fuelCost)}` : '-';
+        travelRowsHtml += `
+          <tr>
+            <td style="border: 1px solid #000; padding: 4.5px 6px; text-align: center;">${formattedDate}</td>
+            <td style="border: 1px solid #000; padding: 4.5px 6px; text-align: center;">${Math.round(startR)}</td>
+            <td style="border: 1px solid #000; padding: 4.5px 6px; text-align: center;">${Math.round(endR)}</td>
+            <td style="border: 1px solid #000; padding: 4.5px 6px; text-align: center; font-weight: bold;">${Math.round(claimedDist)}</td>
+            <td style="border: 1px solid #000; padding: 4.5px 6px; font-size: 10px;">${locString}</td>
+            <td style="border: 1px solid #000; padding: 4.5px 6px; font-size: 10.5px; font-weight: ${fuelCost > 0 ? 'bold' : 'normal'};">${fuelRemarkText}</td>
+          </tr>
+        `;
+
+        // Section 2: Expense Sheet row
         if (fuelCost > 0) {
           grandTotalAmount += fuelCost;
-          rowsHtml += `
+          expenseRowsHtml += `
             <tr>
               <td class="text-center">${formattedDate}</td>
               <td>Fuel</td>
@@ -149,7 +211,7 @@ export async function GET(request: Request) {
 
         if (miscCost > 0) {
           grandTotalAmount += miscCost;
-          rowsHtml += `
+          expenseRowsHtml += `
             <tr>
               <td class="text-center">${formattedDate}</td>
               <td>${log.misc_particulars || 'Bike servicing / parts'}</td>
@@ -160,13 +222,49 @@ export async function GET(request: Request) {
             </tr>
           `;
         }
-      });
+
+        // Section 3: Collect bills for the Gallery
+        if (log.fuel_bill_url && log.fuel_bill_url.startsWith('http')) {
+          billsList.push({
+            type: 'Fuel bill',
+            date: formattedDate,
+            amount: Math.round(fuelCost),
+            startReading: Math.round(startR),
+            endReading: Math.round(endR),
+            distance: Math.round(claimedDist),
+            location: locString,
+            imageUrl: log.fuel_bill_url
+          });
+        }
+
+        if (log.misc_bill_url && log.misc_bill_url.startsWith('http')) {
+          billsList.push({
+            type: 'Servicing bill',
+            date: formattedDate,
+            amount: Math.round(miscCost),
+            startReading: Math.round(startR),
+            endReading: Math.round(endR),
+            distance: Math.round(claimedDist),
+            location: locString,
+            imageUrl: log.misc_bill_url
+          });
+        }
+      }
     }
 
+    // Default period string
+    const periodString = firstDate && lastDate ? `${firstDate} to ${lastDate}` : `01-${month.split('-')[1]}-${month.split('-')[0]} to 30-${month.split('-')[1]}-${month.split('-')[0]}`;
+
+    // Fill minimum empty rows in travel table
+    const currentTravelRows = (travelRowsHtml.match(/<tr/g) || []).length;
+    for (let i = currentTravelRows; i < 14; i++) {
+      travelRowsHtml += `<tr><td style="border: 1px solid #000; padding: 4.5px 6px;">&nbsp;</td><td style="border: 1px solid #000;"></td><td style="border: 1px solid #000;"></td><td style="border: 1px solid #000;"></td><td style="border: 1px solid #000;"></td><td style="border: 1px solid #000;"></td></tr>`;
+    }
+
+    // Expense sheet: Mobile recharge
     const FIXED_MOBILE_RECHARGE = 300;
     grandTotalAmount += FIXED_MOBILE_RECHARGE;
-    
-    rowsHtml += `
+    expenseRowsHtml += `
       <tr>
         <td class="text-center"></td>
         <td>Mobile Recharge</td>
@@ -177,14 +275,14 @@ export async function GET(request: Request) {
       </tr>
     `;
 
-    // Empty rows padding to match the exact physical sheet height
-    const currentRows = (rowsHtml.match(/<tr/g) || []).length;
-    for (let i = currentRows; i < 16; i++) {
-      rowsHtml += `<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>`;
+    // Fill minimum empty rows in expense table
+    const currentExpenseRows = (expenseRowsHtml.match(/<tr/g) || []).length;
+    for (let i = currentExpenseRows; i < 15; i++) {
+      expenseRowsHtml += `<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>`;
     }
 
     // ----------------------------------------------------------------------------------
-    // 2. Fetch PREVIOUS month trips for historical comparison (e.g. July vs Aug)
+    // 2. Fetch PREVIOUS month trips for historical comparison
     // ----------------------------------------------------------------------------------
     const [yearStr, monthStr] = month.split('-');
     const curYear = parseInt(yearStr);
@@ -223,16 +321,14 @@ export async function GET(request: Request) {
           prevFuelLiters += Number(pl.fuel_liters || 0);
         });
       }
-    } catch (prevErr) {
-      console.warn("Could not fetch previous month logs:", prevErr);
-    }
+    } catch (_) {}
 
     const curMonthNameLong = new Date(startDate).toLocaleString('default', { month: 'short', year: 'numeric' }).toUpperCase();
     const curMonthNameShort = new Date(startDate).toLocaleString('default', { month: 'short' });
     const prevMonthNameShort = new Date(prevStartDate).toLocaleString('default', { month: 'short' });
 
     // ----------------------------------------------------------------------------------
-    // 3. MILEAGE CALCULATIONS (Odometer & App GPS)
+    // 3. MILEAGE CALCULATIONS
     // ----------------------------------------------------------------------------------
     const petrolUsageLiters = totalFuelAmount > 0 
       ? (totalFuelAmount / fuelPrice) 
@@ -240,58 +336,117 @@ export async function GET(request: Request) {
 
     const displayLiters = petrolUsageLiters > 0 ? petrolUsageLiters.toFixed(2) : '0.00';
 
-    // A. Odometer Mileage (e.g. 1000 KM / 23.59 L = 42.40 KM/L)
     const odoMileage = (totalOdoKm > 0 && petrolUsageLiters > 0)
       ? (totalOdoKm / petrolUsageLiters).toFixed(2)
       : 'N/A';
 
-    // B. App GPS Mileage (e.g. 950 KM / 23.59 L = 40.27 KM/L)
     const appMileage = (totalAppKm > 0 && petrolUsageLiters > 0)
       ? (totalAppKm / petrolUsageLiters).toFixed(2)
       : 'N/A';
 
-    // C. Previous Month Mileage
     const prevPetrolUsage = prevTotalFuel > 0 ? (prevTotalFuel / fuelPrice) : prevFuelLiters;
     const prevMileage = (prevTotalOdoKm > 0 && prevPetrolUsage > 0)
       ? (prevTotalOdoKm / prevPetrolUsage).toFixed(2)
       : null;
 
+    // ----------------------------------------------------------------------------------
+    // 4. SECTION 3: BILLS & RECEIPTS GALLERY (4 per page in 2x2 grid)
+    // ----------------------------------------------------------------------------------
+    const billChunks: BillItem[][] = [];
+    for (let i = 0; i < billsList.length; i += 4) {
+      billChunks.push(billsList.slice(i, i + 4));
+    }
+
+    let billPagesHtml = '';
+    const totalBillPages = billChunks.length > 0 ? billChunks.length : 1;
+
+    if (billChunks.length === 0) {
+      billPagesHtml = `
+        <div class="report-page page-break">
+          <div class="bills-header">
+            Bills - ${employeeName.toUpperCase()} - ${curMonthNameLong} (Page 1 of 1)
+          </div>
+          <div style="padding: 40px; text-align: center; color: #64748b; font-size: 13px; border: 1px dashed #cbd5e1; border-radius: 8px; margin-top: 20px;">
+            No original bill slips attached for this period.
+          </div>
+        </div>
+      `;
+    } else {
+      billChunks.forEach((chunk, pageIdx) => {
+        const cardsHtml = chunk.map(b => `
+          <div class="bill-card">
+            <div class="bill-title">${b.type} - ${b.date} - Rs.${b.amount}</div>
+            <div class="bill-meta">Km: ${b.distance} (Reading ${b.startReading} to ${b.endReading})</div>
+            <div class="bill-meta" style="color: #475569;">Location: ${b.location}</div>
+            <div class="bill-img-box">
+              <img src="${b.imageUrl}" alt="${b.type}" crossorigin="anonymous" />
+            </div>
+          </div>
+        `).join('');
+
+        billPagesHtml += `
+          <div class="report-page page-break">
+            <div class="bills-header">
+              Bills - ${employeeName.toUpperCase()} - ${curMonthNameLong} (Page ${pageIdx + 1} of ${totalBillPages})
+            </div>
+            <div class="bills-grid">
+              ${cardsHtml}
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    // ----------------------------------------------------------------------------------
+    // FULL COMBINED HTML DOSSIER
+    // ----------------------------------------------------------------------------------
     const htmlContent = `
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Conveyance_Report_${employeeName.replace(/\s+/g, '_')}_${month}</title>
+        <meta charset="utf-8" />
+        <title>${employeeCode}_${employeeName.replace(/\s+/g, '_')}_${month}_Complete_Report</title>
         <style>
-          @page { size: A4 portrait; margin: 8mm; }
-          body { font-family: Arial, Helvetica, sans-serif; font-size: 11px; margin: 0; padding: 0; color: #000; }
-          .container { width: 100%; max-width: 820px; margin: 0 auto; box-sizing: border-box; }
+          @page {
+            size: A4 portrait;
+            margin: 8mm 10mm;
+          }
+          * { box-sizing: border-box; }
+          body {
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 11px;
+            margin: 0;
+            padding: 0;
+            color: #000;
+            background: #f1f5f9;
+          }
+          .dossier-container {
+            width: 100%;
+            max-width: 860px;
+            margin: 0 auto;
+          }
+          .report-page {
+            background: #ffffff;
+            padding: 18px 20px;
+            margin-bottom: 24px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+            border: 1px solid #e2e8f0;
+          }
           
-          table { width: 100%; border-collapse: collapse; border: 1.5px solid #000; }
-          th, td { border: 1px solid #000; padding: 3.5px 5px; }
+          table { width: 100%; border-collapse: collapse; }
+          th, td { border: 1px solid #000; padding: 4px 5px; }
           th { font-weight: bold; text-align: center; background-color: #fff; }
           .text-center { text-align: center; }
           .text-right { text-align: right; }
           .text-left { text-align: left; }
           .font-bold { font-weight: bold; }
-          .title-lg { font-size: 16px; font-weight: bold; padding: 5px; text-align: center; letter-spacing: 0.5px; }
+
+          .title-lg { font-size: 16px; font-weight: bold; padding: 4px; text-align: center; letter-spacing: 0.5px; }
           .title-md { font-size: 12px; font-weight: bold; padding: 3px; text-align: center; }
           .title-sm { font-size: 10px; font-weight: bold; padding: 2px; text-align: center; }
-          
-          .audit-summary-box {
-            margin-top: 14px;
-            width: 100%;
-            border: 1.5px solid #047857;
-            background: #f0fdf4;
-            border-radius: 4px;
-            border-collapse: collapse;
-          }
-          .audit-summary-box td {
-            border: 1px solid #a7f3d0;
-            padding: 5px 8px;
-          }
 
           .signatures-container {
-            margin-top: 36px;
+            margin-top: 32px;
             display: flex;
             justify-content: space-between;
             text-align: center;
@@ -299,142 +454,217 @@ export async function GET(request: Request) {
             font-weight: bold;
           }
           .sign-col {
-            width: 28%;
+            width: 29%;
             border-top: 1.5px solid #000;
-            padding-top: 5px;
+            padding-top: 6px;
+          }
+
+          /* Bills Gallery Styles */
+          .bills-header {
+            font-size: 13px;
+            font-weight: bold;
+            color: #0f172a;
+            border-bottom: 1.5px solid #000;
+            padding-bottom: 6px;
+            margin-bottom: 12px;
+          }
+          .bills-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+          }
+          .bill-card {
+            border: 1px solid #000;
+            padding: 8px;
+            background: #fff;
+            display: flex;
+            flex-direction: column;
+            height: 480px;
+          }
+          .bill-title {
+            font-size: 11px;
+            font-weight: bold;
+            color: #000;
+            margin-bottom: 2px;
+          }
+          .bill-meta {
+            font-size: 9.5px;
+            color: #111;
+            margin-bottom: 2px;
+            line-height: 1.25;
+          }
+          .bill-img-box {
+            flex: 1;
+            margin-top: 4px;
+            border: 1px solid #ccc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #fafafa;
+            overflow: hidden;
+          }
+          .bill-img-box img {
+            max-width: 100%;
+            max-height: 400px;
+            object-fit: contain;
           }
 
           @media print {
+            body { background: transparent; font-size: 10.5px; }
             .no-print { display: none !important; }
-            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .report-page {
+              padding: 0;
+              margin: 0;
+              box-shadow: none;
+              border: none;
+              page-break-after: always;
+              break-after: page;
+            }
+            .page-break {
+              page-break-after: always;
+              break-after: page;
+            }
           }
         </style>
       </head>
       <body>
-        <div class="container">
+        <div class="dossier-container">
           
-          <!-- Screen Action Bar -->
-          <div class="no-print" style="margin-bottom: 12px; padding: 8px 12px; background: #e0f2fe; border: 1px solid #bae6fd; border-radius: 6px; display: flex; justify-content: space-between; align-items: center;">
+          <!-- Top Action Bar (hidden in print) -->
+          <div class="no-print" style="margin: 16px 0 20px; padding: 12px 18px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
             <div>
-              <strong>Monthly Local Conveyance Sheet</strong> (Official Format matching Accounts Scan)
+              <div style="font-weight: bold; font-size: 15px; color: #0f172a;">${employeeName} (${employeeCode})</div>
+              <div style="font-size: 12px; color: #64748b;">Complete Monthwise Dossier (Travel Log + Conveyance Sheet + Attached Bills)</div>
             </div>
-            <div>
-              <button onclick="window.print()" style="background: #0284c7; color: white; border: none; padding: 5px 14px; font-weight: bold; border-radius: 4px; cursor: pointer; font-size: 12px;">
-                🖨️ Print / Save as PDF
+            <div style="display: flex; gap: 8px;">
+              <button onclick="window.print()" style="background: #1d5bb5; color: white; border: none; padding: 8px 16px; font-weight: bold; border-radius: 6px; cursor: pointer; font-size: 13px; display: flex; align-items: center; gap: 6px;">
+                🖨️ Print / Save as PDF (All Pages)
               </button>
             </div>
           </div>
 
-          <table>
-            <!-- HEADER BLOCK -->
-            <tr>
-              <td colspan="6" class="title-lg">INDUSTRIAL SYSTEMS LLP</td>
-            </tr>
-            <tr>
-              <td colspan="6" class="title-sm">KAY M PLAZA,3RD FLOOR, G.S.ROAD, GANESHGURI, NEAR KAR BHAWAN, GHY -06</td>
-            </tr>
-            <tr>
-              <td colspan="6" class="title-md">LOCAL CONVEYANCE EXPENSES SHEET</td>
-            </tr>
-            
-            <!-- METADATA BLOCK -->
-            <tr>
-              <td colspan="3" class="font-bold">Name …${employeeName.toUpperCase()}…………..........................…………..……...</td>
-              <td colspan="3" class="font-bold">For the month of ......${curMonthNameLong}………......................</td>
-            </tr>
+          <!-- ====================================================================== -->
+          <!-- PAGE 1: DAILY TRAVEL & ODOMETER DETAIL LOG (Exact Match to Sample 1)  -->
+          <!-- ====================================================================== -->
+          <div class="report-page page-break">
+            <table style="width: 100%; border-collapse: collapse; border: 1.5px solid #000; margin-bottom: 0;">
+              <tr>
+                <td style="font-weight: bold; font-size: 12.5px; padding: 6px 10px; width: 60%; border: 1.5px solid #000;">
+                  Employee Name: <span style="font-size: 13.5px; text-transform: uppercase;">${employeeName}</span>
+                </td>
+                <td style="font-weight: bold; font-size: 12px; padding: 6px 10px; text-align: right; width: 40%; border: 1.5px solid #000;">
+                  Period: <span style="font-size: 12.5px;">${periodString}</span>
+                </td>
+              </tr>
+            </table>
 
-            <!-- TABLE COLUMNS -->
-            <tr>
-              <th style="width: 13%">Date</th>
-              <th style="width: 31%">Particulars</th>
-              <th style="width: 12%">Mode</th>
-              <th style="width: 18%">Purpose</th>
-              <th style="width: 12%">Amount</th>
-              <th style="width: 14%">Remarks</th>
-            </tr>
+            <table style="width: 100%; border-collapse: collapse; border: 1.5px solid #000; border-top: none;">
+              <thead>
+                <tr style="background-color: #ffffff;">
+                  <th style="border: 1px solid #000; padding: 5px; width: 12%; text-align: center;">Date</th>
+                  <th style="border: 1px solid #000; padding: 5px; width: 14%; text-align: center;">Start Reading</th>
+                  <th style="border: 1px solid #000; padding: 5px; width: 14%; text-align: center;">End Reading</th>
+                  <th style="border: 1px solid #000; padding: 5px; width: 14%; text-align: center;">Distance in KM</th>
+                  <th style="border: 1px solid #000; padding: 5px; width: 30%; text-align: left;">Location</th>
+                  <th style="border: 1px solid #000; padding: 5px; width: 16%; text-align: left;">Fuel/Remarks</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${travelRowsHtml}
+                <!-- Total summary row -->
+                <tr style="font-weight: bold;">
+                  <td style="border: 1px solid #000; padding: 6px; text-align: center;" colspan="3">Total</td>
+                  <td style="border: 1px solid #000; padding: 6px; text-align: center; font-size: 12px;">${Math.round(totalOdoKm)}</td>
+                  <td style="border: 1px solid #000; padding: 6px;"></td>
+                  <td style="border: 1px solid #000; padding: 6px; text-align: left; font-size: 11.5px;">Total Fuel: Rs.${totalFuelAmount.toFixed(2)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
-            <!-- DYNAMIC EXPENSE DATA & BLANK ROWS -->
-            ${rowsHtml}
+          <!-- ====================================================================== -->
+          <!-- PAGE 2: LOCAL CONVEYANCE EXPENSES SHEET (Exact Match to Sample 2)     -->
+          <!-- ====================================================================== -->
+          <div class="report-page page-break">
+            <table style="width: 100%; border: 1.5px solid #000;">
+              <!-- COMPANY HEADER -->
+              <tr>
+                <td colspan="6" class="title-lg">INDUSTRIAL SYSTEMS LLP</td>
+              </tr>
+              <tr>
+                <td colspan="6" class="title-sm">KAY M PLAZA,3RD FLOOR, G.S.ROAD, GANESHGURI, NEAR KAR BHAWAN, GHY -06</td>
+              </tr>
+              <tr>
+                <td colspan="6" class="title-md">LOCAL CONVEYANCE EXPENSES SHEET</td>
+              </tr>
+              
+              <!-- EMPLOYEE & MONTH -->
+              <tr>
+                <td colspan="3" class="font-bold">Name …${employeeName.toUpperCase()}…………..........................…………..……...</td>
+                <td colspan="3" class="font-bold">For the month of ......${curMonthNameLong}………......................</td>
+              </tr>
 
-            <!-- FOOTER NOTE ROW WITH EXACT IMAGE LAYOUT & APP MILEAGE COMPARISON -->
-            <tr>
-              <td class="font-bold">Note:</td>
-              <td class="font-bold">${vehicleDetails}</td>
-              <td class="font-bold">Own Bike</td>
-              <td></td>
-              <td colspan="2" rowspan="6" style="vertical-align: top; padding: 5px 6px; font-weight: bold; font-size: 11px; line-height: 1.55;">
-                <div>${curMonthNameShort}- Km-${Math.round(totalOdoKm)}, Avg/Mileage-${odoMileage}-S</div>
-                <div style="padding-left: 28px; color: #0284c7;">${Math.round(totalAppKm)}-${appMileage}(app)</div>
-                ${prevMileage ? `<div>${prevMonthNameShort}- Km-${Math.round(prevTotalOdoKm)}, Avg/Mileage-${prevMileage}</div>` : ''}
-                
-                <div style="margin-top: 4px; padding-top: 4px; border-top: 1px dashed #bbb; font-size: 9.5px; font-weight: normal; color: #333;">
-                  Total Km-${Math.round(totalOdoKm)} Avg Mileage-${odoMileage}<br/>
-                  App Total Km-${Math.round(totalAppKm)} Avg Milage-${appMileage}
-                </div>
-              </td>
-            </tr>
-            <tr><td>&nbsp;</td><td></td><td></td><td></td></tr>
-            <tr><td>&nbsp;</td><td></td><td></td><td></td></tr>
-            <tr><td>&nbsp;</td><td></td><td></td><td></td></tr>
-            <tr><td>&nbsp;</td><td></td><td></td><td></td></tr>
-            <tr><td>&nbsp;</td><td></td><td></td><td></td></tr>
+              <!-- TABLE COLUMNS -->
+              <tr>
+                <th style="width: 13%">Date</th>
+                <th style="width: 31%">Particulars</th>
+                <th style="width: 12%">Mode</th>
+                <th style="width: 18%">Purpose</th>
+                <th style="width: 12%">Amount</th>
+                <th style="width: 14%">Remarks</th>
+              </tr>
 
-            <!-- TOTAL CLAIM ROW -->
-            <tr>
-              <td colspan="3"></td>
-              <td class="text-center font-bold">Total</td>
-              <td class="text-center font-bold">${Math.round(grandTotalAmount)}</td>
-              <td></td>
-            </tr>
-          </table>
+              <!-- EXPENSE ROWS -->
+              ${expenseRowsHtml}
 
-          <!-- DETAILED VEHICLE MILEAGE AUDIT CARD -->
-          <table class="audit-summary-box">
-            <tr>
-              <td colspan="4" style="background: #dcfce7; font-weight: bold; text-align: center; padding: 5px; font-size: 11px; color: #166534; letter-spacing: 0.5px;">
-                MILEAGE RECONCILIATION SUMMARY (ODOMETER VS APP GPS TRACKING)
-              </td>
-            </tr>
-            <tr>
-              <td style="width: 25%;"><strong>Total Odometer Travel:</strong></td>
-              <td style="width: 25%; font-weight: bold; font-size: 12px; color: #111;">${Math.round(totalOdoKm)} KM</td>
-              <td style="width: 25%;"><strong>Odometer Avg Mileage:</strong></td>
-              <td style="width: 25%; font-weight: bold; font-size: 13px; color: #047857;">${odoMileage} KM / Liter</td>
-            </tr>
-            <tr>
-              <td><strong>App Tracked Route Distance:</strong></td>
-              <td style="font-weight: bold; font-size: 12px; color: #0284c7;">${Math.round(totalAppKm)} KM</td>
-              <td><strong>App GPS Avg Mileage:</strong></td>
-              <td style="font-weight: bold; font-size: 13px; color: #0284c7;">${appMileage} KM / Liter</td>
-            </tr>
-            <tr style="background: #d1fae5;">
-              <td colspan="2">
-                <strong>Fuel Claimed:</strong> ₹${totalFuelAmount.toFixed(2)} (${displayLiters} L Petrol @ ₹${fuelPrice}/L)
-              </td>
-              <td colspan="2" style="text-align: right; font-weight: bold; padding: 5px 8px;">
-                <span style="font-size: 10.5px; color: #065f46; text-transform: uppercase;">Route Variance:</span>
-                <span style="font-size: 12px; color: ${Math.abs(totalOdoKm - totalAppKm) > (totalAppKm * 0.18) ? '#b91c1c' : '#047857'}; margin-left: 6px;">
-                  ${totalAppKm > 0 ? (((totalOdoKm - totalAppKm) / totalAppKm) * 100).toFixed(1) : '0.0'}%
-                </span>
-              </td>
-            </tr>
-          </table>
+              <!-- NOTES & VEHICLE MILEAGE BOX -->
+              <tr>
+                <td class="font-bold">Note:</td>
+                <td class="font-bold">${vehicleDetails}</td>
+                <td class="font-bold">Own Bike</td>
+                <td></td>
+                <td colspan="2" rowspan="6" style="vertical-align: top; padding: 5px 6px; font-weight: bold; font-size: 11px; line-height: 1.55;">
+                  <div>${curMonthNameShort}- Km-${Math.round(totalOdoKm)}, Avg/Mileage-${odoMileage}-S</div>
+                  <div style="padding-left: 28px; color: #0284c7;">App km - ${totalAppKm > 0 ? `${Math.round(totalAppKm)}` : 'no data'}</div>
+                  ${prevMileage ? `<div>${prevMonthNameShort}- Km-${Math.round(prevTotalOdoKm)}, Avg/Mileage-${prevMileage}</div>` : ''}
+                </td>
+              </tr>
+              <tr><td>&nbsp;</td><td></td><td></td><td></td></tr>
+              <tr><td>&nbsp;</td><td></td><td></td><td></td></tr>
+              <tr><td>&nbsp;</td><td></td><td></td><td></td></tr>
+              <tr><td>&nbsp;</td><td></td><td></td><td></td></tr>
+              <tr><td>&nbsp;</td><td></td><td></td><td></td></tr>
 
-          <!-- SIGNATURE AUDIT BLOCKS -->
-          <div class="signatures-container">
-            <div class="sign-col">
-              Verified by TL<br/>
-              <span style="font-size: 10px; font-weight: normal; color: #555;">(Team Leader)</span>
-            </div>
-            <div class="sign-col">
-              Verified by Manager<br/>
-              <span style="font-size: 10px; font-weight: normal; color: #555;">(Operations Manager)</span>
-            </div>
-            <div class="sign-col">
-              Approved by MD<br/>
-              <span style="font-size: 10px; font-weight: normal; color: #555;">(Managing Director)</span>
+              <!-- TOTAL CLAIM ROW -->
+              <tr>
+                <td colspan="3"></td>
+                <td class="text-center font-bold">Total</td>
+                <td class="text-center font-bold">${Math.round(grandTotalAmount)}</td>
+                <td></td>
+              </tr>
+            </table>
+
+            <!-- SIGNATURE AUDIT BLOCKS -->
+            <div class="signatures-container">
+              <div class="sign-col">
+                Verified by TL<br/>
+                <span style="font-size: 9.5px; font-weight: normal; color: #555;">(Checked Odometer & GPS)</span>
+              </div>
+              <div class="sign-col">
+                Verified by Manager<br/>
+                <span style="font-size: 9.5px; font-weight: normal; color: #555;">(Checked Tour & Operations)</span>
+              </div>
+              <div class="sign-col">
+                Approved by MD<br/>
+                <span style="font-size: 9.5px; font-weight: normal; color: #555;">(Sanctioned for Payment)</span>
+              </div>
             </div>
           </div>
+
+          <!-- ====================================================================== -->
+          <!-- PAGE 3+: BILLS & RECEIPTS GALLERY (2x2 Grid with Captions)              -->
+          <!-- ====================================================================== -->
+          ${billPagesHtml}
 
         </div>
       </body>

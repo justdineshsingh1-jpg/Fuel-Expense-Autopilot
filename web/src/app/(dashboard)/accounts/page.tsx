@@ -23,6 +23,40 @@ export default function AccountsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [settlementFilter, setSettlementFilter] = useState<'pending' | 'settled' | 'all'>('pending');
   const [configuredFuelPrice, setConfiguredFuelPrice] = useState<number>(106);
+  const [downloadingZip, setDownloadingZip] = useState(false);
+
+  const handleDownloadMonthwiseZip = async () => {
+    const currentMonth = filteredRollups[0]?.month || new Date().toISOString().substring(0, 7);
+    const chosenMonth = window.prompt(`Enter Month for Batch Dossiers Export (YYYY-MM):`, currentMonth);
+    if (!chosenMonth) return;
+
+    setDownloadingZip(true);
+    toast.loading(`Packaging monthwise employee dossiers for ${chosenMonth}...`);
+    try {
+      const url = `/api/reports/monthwise-zip?month=${chosenMonth.trim()}&fuelPrice=${configuredFuelPrice}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to generate monthwise archive');
+      }
+      const blob = await res.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = `Conveyance_Reports_${chosenMonth.trim().replace('-', '_')}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(downloadUrl);
+      document.body.removeChild(a);
+      toast.dismiss();
+      toast.success(`🎉 Downloaded complete monthwise dossiers archive for ${chosenMonth}!`);
+    } catch (e: any) {
+      toast.dismiss();
+      toast.error(e.message || 'Error downloading archive');
+    } finally {
+      setDownloadingZip(false);
+    }
+  };
 
   const fetchTrips = async () => {
     try {
@@ -297,6 +331,18 @@ export default function AccountsPage() {
             </Button>
           )}
 
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleDownloadMonthwiseZip} 
+            disabled={downloadingZip}
+            className="text-xs font-semibold whitespace-nowrap bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
+            title="Download all employee dossiers in a monthwise ZIP folder for offline audit & printing"
+          >
+            <DownloadCloud className={cn("h-4 w-4 mr-1.5 text-blue-600", downloadingZip && "animate-bounce")} />
+            {downloadingZip ? 'Packaging ZIP...' : '📦 Download Monthwise Dossiers (ZIP)'}
+          </Button>
+
           <Button variant="outline" size="sm" onClick={handleExportCSV} className="text-xs whitespace-nowrap">
             <FileSpreadsheet className="h-4 w-4 mr-1.5 text-emerald-600" /> Export Reconciliation CSV
           </Button>
@@ -521,10 +567,10 @@ export default function AccountsPage() {
                     <td className="px-3 py-3 text-center whitespace-nowrap">
                       <button
                         onClick={() => window.open(`/api/reports/monthly-conveyance?userId=${row.userId}&month=${row.month}&fuelPrice=${configuredFuelPrice}`, '_blank')}
-                        className="text-xs font-semibold px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded shadow-xs transition-colors"
-                        title="View Official Conveyance & Fuel Mileage Sheet"
+                        className="text-xs font-semibold px-2.5 py-1 bg-white hover:bg-blue-50 text-blue-700 border border-blue-300 rounded shadow-xs transition-colors inline-flex items-center gap-1"
+                        title="View & Print Complete Dossier (Travel Log + Conveyance Sheet + Attached Bills)"
                       >
-                        📄 Sheet
+                        📄 Complete Dossier (PDF)
                       </button>
                     </td>
                   </tr>
