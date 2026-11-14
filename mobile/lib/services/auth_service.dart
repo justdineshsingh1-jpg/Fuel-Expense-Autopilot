@@ -64,6 +64,26 @@ class AuthService {
     }
   }
 
+  Future<bool> changePassword(String userId, String currentPassword, String newPassword) async {
+    try {
+      final response = await _apiService.client.post(
+        ApiConfig.changePassword,
+        data: {
+          'user_id': userId,
+          'current_password': currentPassword,
+          'new_password': newPassword,
+        },
+      );
+      if (response.statusCode == 200 && response.data != null && response.data['success'] == true) {
+        return true;
+      }
+      return false;
+    } catch (e) {
+      debugPrint("Change Password Error: $e");
+      rethrow;
+    }
+  }
+
   Future<void> logout() async {
     try {
       await _storage.delete(key: 'jwt_token');

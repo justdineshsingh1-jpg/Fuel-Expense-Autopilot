@@ -322,11 +322,13 @@ class TripProvider with ChangeNotifier {
             debugPrint("Auto-retiring stale server active trip: ${t.id} from ${t.date}");
             // Close it on server so it doesn't linger forever
             if (t.id != null && !t.id!.startsWith('offline_')) {
-              _tripService.saveTrip({
-                'trip_id': t.id,
-                'user_id': currentUserId ?? '',
-                'approval_status': 'abandoned',
-              }).catchError((_) {});
+              try {
+                _tripService.saveTrip({
+                  'trip_id': t.id,
+                  'user_id': currentUserId ?? '',
+                  'approval_status': 'abandoned',
+                });
+              } catch (_) {}
             }
             continue;
           }
@@ -399,11 +401,13 @@ class TripProvider with ChangeNotifier {
       await prefs.remove(_activeTripPrefsKey);
 
       if (tripIdToAbandon != null && !tripIdToAbandon.startsWith('offline_')) {
-        await _tripService.saveTrip({
-          'trip_id': tripIdToAbandon,
-          'user_id': _authProvider?.user?.id ?? '',
-          'approval_status': 'abandoned',
-        }).catchError((_) {});
+        try {
+          await _tripService.saveTrip({
+            'trip_id': tripIdToAbandon,
+            'user_id': _authProvider?.user?.id ?? '',
+            'approval_status': 'abandoned',
+          });
+        } catch (_) {}
       }
       
       _trips.removeWhere((t) => t.status.toLowerCase() == 'active' || t.id == tripIdToAbandon);

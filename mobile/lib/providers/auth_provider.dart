@@ -47,4 +47,25 @@ class AuthProvider with ChangeNotifier {
     _user = null;
     notifyListeners();
   }
+
+  Future<String?> changePassword(String currentPassword, String newPassword) async {
+    if (_user == null || _user!.id.isEmpty) {
+      return 'User session not found. Please log in again.';
+    }
+    try {
+      final success = await _authService.changePassword(_user!.id, currentPassword, newPassword);
+      if (success) {
+        return null; // Null means success
+      }
+      return 'Failed to change password. Please check your credentials.';
+    } catch (e) {
+      final errStr = e.toString();
+      if (errStr.contains('Current password is incorrect')) {
+        return 'Current password is incorrect.';
+      } else if (errStr.contains('6 characters')) {
+        return 'New password must be at least 6 characters.';
+      }
+      return 'Failed to change password: ${errStr.replaceAll('Exception:', '').trim()}';
+    }
+  }
 }
