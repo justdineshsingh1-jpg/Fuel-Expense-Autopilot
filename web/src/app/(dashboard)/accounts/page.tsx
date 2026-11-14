@@ -11,7 +11,7 @@ import { VALIDATION_RULES } from '@/lib/constants';
 import { 
   Search, CheckSquare, DownloadCloud, Server, DollarSign, 
   CreditCard, RefreshCw, CheckCircle2, ChevronRight, FileSpreadsheet,
-  Fuel
+  Fuel, X
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabaseAdmin as supabase } from '@/lib/supabaseAdmin';
@@ -24,6 +24,37 @@ export default function AccountsPage() {
   const [settlementFilter, setSettlementFilter] = useState<'pending' | 'settled' | 'all'>('pending');
   const [configuredFuelPrice, setConfiguredFuelPrice] = useState<number>(106);
   const [downloadingZip, setDownloadingZip] = useState(false);
+  const [savedLogBookModal, setSavedLogBookModal] = useState<{
+    isOpen: boolean;
+    employeeName: string;
+    entriesCount: number;
+    totalKm: number;
+    pdfUrl: string;
+    monthFormatted: string;
+    monthKey: string;
+  } | null>(null);
+
+  const handleGenerateLogBookPdf = (row: any) => {
+    const pdfUrl = `/api/reports/monthly-conveyance?userId=${row.userId}&month=${row.month}&fuelPrice=${configuredFuelPrice}`;
+    
+    // Format month string e.g. "Nov-2026"
+    const dateObj = new Date(`${row.month}-01`);
+    const monthName = dateObj.toLocaleString('en-US', { month: 'short' });
+    const yearName = dateObj.getFullYear();
+    const monthFormatted = `${monthName}-${yearName}`;
+
+    window.open(pdfUrl, '_blank');
+
+    setSavedLogBookModal({
+      isOpen: true,
+      employeeName: row.employeeName,
+      entriesCount: row.tripsCount,
+      totalKm: Math.round(row.totalKm),
+      pdfUrl,
+      monthFormatted,
+      monthKey: row.month,
+    });
+  };
 
   const handleDownloadMonthwiseZip = async () => {
     const currentMonth = filteredRollups[0]?.month || new Date().toISOString().substring(0, 7);
@@ -566,11 +597,11 @@ export default function AccountsPage() {
                     </td>
                     <td className="px-3 py-3 text-center whitespace-nowrap">
                       <button
-                        onClick={() => window.open(`/api/reports/monthly-conveyance?userId=${row.userId}&month=${row.month}&fuelPrice=${configuredFuelPrice}`, '_blank')}
-                        className="text-xs font-semibold px-2.5 py-1 bg-white hover:bg-blue-50 text-blue-700 border border-blue-300 rounded shadow-xs transition-colors inline-flex items-center gap-1"
-                        title="View & Print Complete Dossier (Travel Log + Conveyance Sheet + Attached Bills)"
+                        onClick={() => handleGenerateLogBookPdf(row)}
+                        className="text-xs font-semibold px-2.5 py-1 bg-white hover:bg-blue-50 text-blue-700 border border-blue-300 rounded shadow-xs transition-colors inline-flex items-center gap-1 cursor-pointer"
+                        title="Generate & Save Log Book PDF"
                       >
-                        📄 Complete Dossier (PDF)
+                        📄 Log Book PDF
                       </button>
                     </td>
                   </tr>
@@ -580,6 +611,61 @@ export default function AccountsPage() {
           </table>
         </div>
       </Card>
+
+      {/* Log Book PDF Saved Modal (Matching User's Screenshot Exactly) */}
+      {savedLogBookModal && savedLogBookModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl shadow-2xl border border-gray-100 max-w-sm w-full p-6 relative">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between pb-1">
+              <h3 className="text-2xl font-normal text-gray-900 tracking-tight">
+                Log Book PDF Saved
+              </h3>
+              <button 
+                onClick={() => setSavedLogBookModal(null)}
+                className="text-gray-400 hover:text-gray-700 p-1 rounded-full hover:bg-gray-100 transition-colors"
+                title="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Content Body */}
+            <div className="mt-4 space-y-4">
+              <p className="text-gray-800 text-[15px] leading-relaxed">
+                Log Book PDF saved for {savedLogBookModal.employeeName} ({savedLogBookModal.entriesCount} entries, {savedLogBookModal.totalKm} KM).
+              </p>
+
+              <div className="pt-2 space-y-2">
+                <div>
+                  <a 
+                    href={savedLogBookModal.pdfUrl} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-[#4F46E5] hover:text-[#4338CA] text-[15px] underline font-medium block cursor-pointer"
+                  >
+                    Open PDF
+                  </a>
+                </div>
+                <div>
+                  <button 
+                    onClick={() => {
+                      const url = `/api/reports/monthwise-zip?month=${savedLogBookModal.monthKey}&fuelPrice=${configuredFuelPrice}`;
+                      window.location.href = url;
+                    }}
+                    className="text-[#4F46E5] hover:text-[#4338CA] text-[15px] underline font-medium block text-left cursor-pointer"
+                  >
+                    Open folder ({savedLogBookModal.monthFormatted})
+                  </button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
