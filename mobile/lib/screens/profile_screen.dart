@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../providers/trip_provider.dart';
 import '../widgets/stat_card.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -12,6 +13,14 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   bool _notificationsEnabled = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<TripProvider>(context, listen: false).loadTrips();
+    });
+  }
 
   void _showChangePasswordDialog(BuildContext context) {
     final currentPassController = TextEditingController();
@@ -188,72 +197,95 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context).user;
-    
+    final tripProvider = Provider.of<TripProvider>(context);
+
+    // Compute dynamic current-month summary for logged-in user
+    final now = DateTime.now();
+    final currentMonthTrips = tripProvider.trips.where((t) =>
+        t.date.year == now.year && t.date.month == now.month).toList();
+
+    final double totalKm = currentMonthTrips.fold(0.0, (sum, t) => sum + t.distanceKm);
+    final double totalFuel = currentMonthTrips.fold(0.0, (sum, t) => sum + (t.fuelBill?.amount ?? 0.0));
+    final int daysLogged = currentMonthTrips.map((t) => '${t.date.year}-${t.date.month}-${t.date.day}').toSet().length;
+    final int pendingFlags = currentMonthTrips.where((t) => t.flags.isNotEmpty || t.status.toLowerCase() == 'flagged').length;
+
+    final String totalKmStr = totalKm == 0
+        ? '0'
+        : (totalKm % 1 == 0 ? totalKm.toInt().toString() : totalKm.toStringAsFixed(1));
+    final String totalFuelStr = '₹${totalFuel.toStringAsFixed(0)}';
+    final String daysLoggedStr = '$daysLogged';
+    final String pendingFlagsStr = '$pendingFlags';
+
     return Scaffold(
       appBar: AppBar(title: const Text('Profile')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Employee Details Card
-            Card(
-              elevation: 4,
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 32,
-                      backgroundColor: Theme.of(context).primaryColor,
-                      child: Text(
-                        user?.fullName.substring(0, 1).toUpperCase() ?? 'U',
-                        style: const TextStyle(fontSize: 24, color: Colors.white),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          await Provider.of<TripProvider>(context, listen: false).loadTrips();
+        },
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Employee Details Card
+              Card(
+                elevation: 4,
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 32,
+                        backgroundColor: Theme.of(context).primaryColor,
+                        child: Text(
+                          user?.fullName.substring(0, 1).toUpperCase() ?? 'U',
+                          style: const TextStyle(fontSize: 24, color: Colors.white),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(user?.fullName ?? '', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                          Text('Code: ${user?.employeeCode ?? ''}', style: const TextStyle(color: Colors.grey)),
-                          Text(user?.email ?? '', style: const TextStyle(color: Colors.grey)),
-                          const SizedBox(height: 4),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).primaryColor.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(4),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(user?.fullName ?? '', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                            Text('Code: ${user?.employeeCode ?? ''}', style: const TextStyle(color: Colors.grey)),
+                            Text(user?.email ?? '', style: const TextStyle(color: Colors.grey)),
+                            const SizedBox(height: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).primaryColor.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text('${user?.department} - ${user?.role}', style: TextStyle(color: Theme.of(context).primaryColor, fontSize: 12)),
                             ),
-                            child: Text('${user?.department} - ${user?.role}', style: TextStyle(color: Theme.of(context).primaryColor, fontSize: 12)),
-                          ),
-                        ],
-                      ),
-                    )
-                  ],
+                          ],
+                        ),
+                      )
+                    ],
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 24),
-            
-            const Text('Monthly Summary', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 16),
-            GridView.count(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 2,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              childAspectRatio: 1.5,
-              children: [
-                const StatCard(title: 'Total KM', value: '452', icon: Icons.directions_car, color: Colors.blue),
-                const StatCard(title: 'Total Fuel ₹', value: '₹3,450', icon: Icons.local_gas_station, color: Colors.green),
-                const StatCard(title: 'Days Logged', value: '14', icon: Icons.calendar_today, color: Colors.orange),
-                StatCard(title: 'Pending Flags', value: '0', icon: Icons.flag, color: Colors.red.shade400),
-              ],
-            ),
-            const SizedBox(height: 24),
+              const SizedBox(height: 24),
+              
+              const Text('Monthly Summary', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              GridView.count(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: 2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 1.5,
+                children: [
+                  StatCard(title: 'Total KM', value: totalKmStr, icon: Icons.directions_car, color: Colors.blue),
+                  StatCard(title: 'Total Fuel ₹', value: totalFuelStr, icon: Icons.local_gas_station, color: Colors.green),
+                  StatCard(title: 'Days Logged', value: daysLoggedStr, icon: Icons.calendar_today, color: Colors.orange),
+                  StatCard(title: 'Pending Flags', value: pendingFlagsStr, icon: Icons.flag, color: Colors.red.shade400),
+                ],
+              ),
+              const SizedBox(height: 24),
 
             const Text('Account & Security', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
@@ -307,6 +339,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }
