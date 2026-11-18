@@ -1,52 +1,62 @@
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 
 class LocationService {
   StreamSubscription<Position>? _positionStream;
   
-  // Adaptive Tracker State
-  String _currentMode = 'survey'; // 'transit' or 'survey'
-  DateTime? _modeDebounceStart;
-  DateTime? _stationaryStartTime;
+  // Tracker State
   Position? _lastSavedPos;
   DateTime? _lastSavedTime;
   Position? _lastGeocodedPos;
 
-  Future<void> startBackgroundTracking(Function(Position, String, String?) onLocationUpdate) async {
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) throw Exception('Location services disabled.');
-
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) throw Exception('Location permissions denied');
-    }
-    if (permission == LocationPermission.deniedForever) throw Exception('Permissions permanently denied.');
-
-    // Reset geocode tracker on new shift
-    _lastGeocodedPos = null;
-    _lastSavedPos = null;
-    _lastSavedTime = null;
-
-    // Immediately get and emit initial position so waypoint 0 is never missing
+  Future<bool> startBackgroundTracking(Function(Position, String, String?) onLocationUpdate) async {
     try {
-      final initialPos = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 8),
-      );
-      _processLocation(initialPos, onLocationUpdate, isInitial: true);
-    } catch (_) {
-      try {
-        final lastKnown = await Geolocator.getLastKnownPosition();
-        if (lastKnown != null) {
-          _processLocation(lastKnown, onLocationUpdate, isInitial: true);
-        }
-      } catch (_) {}
-    }
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        debugPrint('Location services are disabled on device.');
+        // Request enabling
+        serviceEnabled = await Geolocator.openLocationSettings();
+      }
 
-    // Start with Survey configuration (highest granularity)
-    _startStream(10, onLocationUpdate);
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+
+      // Reset geocode tracker on new shift
+      _lastGeocodedPos = null;
+      _lastSavedPos = null;
+      _lastSavedTime = null;
+
+      // Immediately get fresh current position
+      try {
+        final initialPos = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+          timeLimit: const Duration(seconds: 6),
+        );
+        _processLocation(initialPos, onLocationUpdate, isInitial: true);
+      } catch (_) {
+        // Fallback to last known position if recent
+        try {
+          final lastKnown = await Geolocator.getLastKnownPosition();
+          if (lastKnown != null && lastKnown.timestamp != null) {
+            final ageInMins = DateTime.now().difference(lastKnown.timestamp!).inMinutes;
+            if (ageInMins < 15) {
+              _processLocation(lastKnown, onLocationUpdate, isInitial: true);
+            }
+          }
+        } catch (_) {}
+      }
+
+      // Start continuous high-fidelity stream (8m filter, 5s interval for smooth route lines)
+      _startStream(8, onLocationUpdate);
+      return true;
+    } catch (e) {
+      debugPrint("startBackgroundTracking error: $e");
+      return false;
+    }
   }
 
   void _startStream(int distanceFilter, Function(Position, String, String?) onLocationUpdate) {
@@ -54,9 +64,9 @@ class LocationService {
     
     LocationSettings locationSettings = AndroidSettings(
       accuracy: LocationAccuracy.high,
-      distanceFilter: distanceFilter, // Dynamically changes between 10m and 100m
-      intervalDuration: const Duration(seconds: 15),
-      forceLocationManager: false, // Use FusedLocationProvider for reliable background GPS
+      distanceFilter: distanceFilter, // 8 meters ensures accurate street turns without straight-line shortcuts
+      intervalDuration: const Duration(seconds: 5),
+      forceLocationManager: false, // FusedLocationProvider for seamless battery-friendly GPS
       foregroundNotificationConfig: const ForegroundNotificationConfig(
         notificationText: "Tracking your trip route in the background.",
         notificationTitle: "Fuel Expense Autopilot Active",
@@ -65,23 +75,27 @@ class LocationService {
     );
 
     _positionStream = Geolocator.getPositionStream(locationSettings: locationSettings)
-        .listen((Position position) {
-      _processLocation(position, onLocationUpdate);
-    });
+        .listen(
+          (Position position) {
+            _processLocation(position, onLocationUpdate);
+          },
+          onError: (err) {
+            debugPrint("GPS stream error: $err");
+          },
+        );
   }
 
   void _processLocation(Position pos, Function(Position, String, String?) onLocationUpdate, {bool isInitial = false}) {
     // 1. Hardware Accuracy Filter:
-    // For initial point or when no points recorded yet, accept up to 100m to never miss start coordinate.
-    // For ongoing points, accept up to 65m (outdoor realistic field conditions).
-    final maxAllowedAccuracy = (_lastSavedPos == null || isInitial) ? 100.0 : 65.0;
+    // Realistic outdoor mobile accuracy in field environments is up to 150m.
+    // Discard only clear cell-tower triangulation spikes (> 150m).
+    final maxAllowedAccuracy = isInitial ? 200.0 : 150.0;
     if (pos.accuracy > maxAllowedAccuracy) return;
 
-    double speedKmh = pos.speed * 3.6; // m/s to km/h
     DateTime now = DateTime.now();
 
-    // 2. Dwell / Stationary check:
-    // If stationary for > 3 minutes, only record a heartbeat point every 5 minutes to avoid ghost drift
+    // 2. Anti-drift check:
+    // If phone is stationary (moved less than 5m and speed < 1.5 km/h), skip recording to avoid phantom KM
     if (_lastSavedPos != null && !isInitial) {
       final distFromLast = Geolocator.distanceBetween(
         _lastSavedPos!.latitude,
@@ -90,47 +104,19 @@ class LocationService {
         pos.longitude,
       );
 
-      if (speedKmh < 2.0 && distFromLast < 10.0) {
-        _stationaryStartTime ??= now;
-        final minsStationary = now.difference(_stationaryStartTime!).inMinutes;
-        // If stationary > 3 mins, only record a heartbeat every 5 minutes
-        if (minsStationary >= 3) {
-          if (_lastSavedTime != null && now.difference(_lastSavedTime!).inMinutes < 5) {
-            return; // Drop drift jitter while stopped at a site
-          }
+      final speedKmh = pos.speed * 3.6;
+      if (distFromLast < 6.0 && speedKmh < 1.5) {
+        // Stationary: only heartbeat every 3 minutes if stopped
+        if (_lastSavedTime != null && now.difference(_lastSavedTime!).inMinutes < 3) {
+          return;
         }
-      } else {
-        _stationaryStartTime = null; // Moving again
       }
-    }
-
-    // 3. Adaptive Mode Shifting with 45s Debounce
-    String targetMode = _currentMode;
-    if (speedKmh > 20.0) {
-      targetMode = 'transit';
-    } else if (speedKmh <= 15.0) {
-      targetMode = 'survey';
-    }
-
-    if (targetMode != _currentMode && !isInitial) {
-      _modeDebounceStart ??= now;
-      if (now.difference(_modeDebounceStart!).inSeconds >= 45) {
-        // Shift confirmed after 45 seconds of sustained speed
-        _currentMode = targetMode;
-        _modeDebounceStart = null;
-        
-        // Restart stream with new physical distance filter to save battery
-        _startStream(_currentMode == 'transit' ? 100 : 10, onLocationUpdate);
-        return; // Restarting stream will capture the point naturally
-      }
-    } else {
-      _modeDebounceStart = null; // Cancel debounce if speed fluctuates back
     }
 
     _lastSavedPos = pos;
     _lastSavedTime = now;
 
-    // 4. Reverse Geocode Address Check (Trigger on initial point or every 5 kilometers)
+    // 3. Reverse Geocode Address Check (Trigger on initial point or every 3 kilometers)
     double distanceSinceLastGeocode = 99999;
     if (_lastGeocodedPos != null) {
       distanceSinceLastGeocode = Geolocator.distanceBetween(
@@ -141,23 +127,23 @@ class LocationService {
       );
     }
 
-    if (isInitial || distanceSinceLastGeocode >= 5000) { // 5 KM or initial start
+    final mode = (pos.speed * 3.6 > 20) ? 'transit' : 'survey';
+
+    if (isInitial || distanceSinceLastGeocode >= 3000) {
       _lastGeocodedPos = pos;
       getAddressFromLatLng(pos.latitude, pos.longitude).then((address) {
-        onLocationUpdate(pos, _currentMode, address);
+        onLocationUpdate(pos, mode, address);
       }).catchError((_) {
-        onLocationUpdate(pos, _currentMode, null);
+        onLocationUpdate(pos, mode, null);
       });
     } else {
-      onLocationUpdate(pos, _currentMode, null);
+      onLocationUpdate(pos, mode, null);
     }
   }
 
   void stopTracking() {
     _positionStream?.cancel();
     _positionStream = null;
-    _stationaryStartTime = null;
-    _modeDebounceStart = null;
     _lastSavedPos = null;
     _lastSavedTime = null;
     _lastGeocodedPos = null;

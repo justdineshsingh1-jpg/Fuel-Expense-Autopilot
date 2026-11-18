@@ -23,5 +23,10 @@ class PermissionUtils {
         await Permission.locationAlways.request();
       }
     }
+
+    // 5. Request Battery Optimization Exemption (Prevents OS from killing background GPS)
+    if (await Permission.ignoreBatteryOptimizations.isDenied) {
+      await Permission.ignoreBatteryOptimizations.request();
+    }
   }
 }

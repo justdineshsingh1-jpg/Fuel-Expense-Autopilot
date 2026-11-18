@@ -45,6 +45,7 @@ class TripProvider with ChangeNotifier {
   double get liveDistance => _liveDistance;
   String get currentAddress => _currentAddress;
   int get currentWaypointsCount => _currentWaypoints.length;
+  List<Map<String, dynamic>> get currentWaypoints => _currentWaypoints;
   double get fuelAmount => _fuelAmount;
   double get miscAmount => _miscAmount;
   String? get fuelBillUrl => _fuelBillUrl;
@@ -169,7 +170,10 @@ class TripProvider with ChangeNotifier {
           pos.latitude, 
           pos.longitude
         );
-        _liveDistance += (dist / 1000.0);
+        // Only accumulate distance if movement is real (>= 6 meters) to avoid stationary GPS jitter
+        if (dist >= 6.0) {
+          _liveDistance += (dist / 1000.0);
+        }
       }
       if (address != null && address.isNotEmpty) {
         _currentAddress = address;
@@ -187,7 +191,25 @@ class TripProvider with ChangeNotifier {
       _ensureActiveTripInList();
       _saveActiveTripLocally();
       notifyListeners();
+
+      // Periodically sync waypoints to server every 15 waypoints so server always has live track
+      if (_isTripActive && _activeTripId != null && _currentWaypoints.length % 15 == 0) {
+        _syncActiveWaypointsToServer();
+      }
     });
+  }
+
+  Future<void> _syncActiveWaypointsToServer() async {
+    if (!_isTripActive || _activeTripId == null || _activeTripId!.startsWith('offline_')) return;
+    try {
+      await _tripService.saveTrip({
+        'trip_id': _activeTripId,
+        'user_id': _authProvider?.user?.id ?? '',
+        'approval_status': 'active',
+        'distance_km': _liveDistance,
+        'waypoints': _currentWaypoints,
+      });
+    } catch (_) {}
   }
 
   void _ensureActiveTripInList() {

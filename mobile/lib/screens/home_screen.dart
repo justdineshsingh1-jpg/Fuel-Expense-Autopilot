@@ -7,7 +7,9 @@ import '../utils/camera_utils.dart';
 import '../widgets/status_badge.dart';
 import '../widgets/photo_thumbnail.dart';
 import 'package:intl/intl.dart';
+import 'package:geolocator/geolocator.dart';
 import 'dart:io';
+import '../widgets/route_map_widget.dart';
 import 'trip_history_screen.dart';
 import 'trip_detail_screen.dart';
 import 'profile_screen.dart';
@@ -154,6 +156,19 @@ class _HomeScreenState extends State<HomeScreen> {
                           }
 
                           modalSetState(() { isStarting = true; });
+
+                          // Ensure GPS is enabled on the device
+                          final isGpsOn = await Geolocator.isLocationServiceEnabled();
+                          if (!isGpsOn) {
+                            await Geolocator.openLocationSettings();
+                            modalSetState(() { isStarting = false; });
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                              content: Text('Please enable GPS / Location on your phone to track your travel.'),
+                              backgroundColor: Colors.orange,
+                            ));
+                            return;
+                          }
+
                           final img = capturedImageUrl!;
                           final messenger = ScaffoldMessenger.of(context);
                           final tripProv = Provider.of<TripProvider>(context, listen: false);
@@ -906,6 +921,13 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ],
                       ),
+                      if (tripProvider.currentWaypoints.isNotEmpty) ...[
+                        const SizedBox(height: 14),
+                        RouteMapWidget(
+                          waypoints: tripProvider.currentWaypoints,
+                          isLive: true,
+                        ),
+                      ],
                       if (tripProvider.fuelAmount > 0 || tripProvider.miscAmount > 0 || tripProvider.fuelBillUrl != null || tripProvider.miscBillUrl != null) ...[
                         const Divider(height: 24),
                         const Row(

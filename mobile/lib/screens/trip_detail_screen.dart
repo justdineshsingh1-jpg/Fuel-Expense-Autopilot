@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../models/trip_log.dart';
 import '../widgets/status_badge.dart';
 import '../widgets/photo_thumbnail.dart';
+import '../widgets/route_map_widget.dart';
 import 'flag_explanation_screen.dart';
 
 class TripDetailScreen extends StatelessWidget {
@@ -93,6 +94,15 @@ class TripDetailScreen extends StatelessWidget {
                   : 'Total Distance: ${trip.distanceKm.toStringAsFixed(1)} KM',
                 style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
+            ),
+            const SizedBox(height: 16),
+
+            // GPS Route Map Section (Live Route / Historical Path)
+            RouteMapWidget(
+              tripId: trip.id,
+              locations: trip.locations,
+              claimedKm: trip.distanceKm > 0 ? trip.distanceKm : null,
+              isLive: isActive,
             ),
             const Divider(height: 32),
 
