@@ -89,14 +89,14 @@ class LocationService {
 
   void _processLocation(Position pos, Function(Position, String, String?) onLocationUpdate, {bool isInitial = false}) {
     // 1. Hardware Accuracy Filter:
-    // Realistic outdoor mobile accuracy in field environments is up to 150m.
-    // Discard only clear cell-tower triangulation spikes (> 150m).
-    final maxAllowedAccuracy = isInitial ? 200.0 : 150.0;
+    // Realistic outdoor mobile accuracy in Indian field environments is up to 100m.
+    // Discard only clear cell-tower triangulation spikes (> 100m).
+    final maxAllowedAccuracy = isInitial ? 120.0 : 100.0;
     if (pos.accuracy > maxAllowedAccuracy) return;
 
     DateTime now = DateTime.now();
 
-    // 2. Anti-drift & Teleportation check:
+    // 2. Teleportation sanity check:
     if (_lastSavedPos != null && !isInitial) {
       final distFromLast = Geolocator.distanceBetween(
         _lastSavedPos!.latitude,
@@ -106,19 +106,10 @@ class LocationService {
       );
 
       final elapsedSec = now.difference(_lastSavedTime ?? now).inSeconds.abs();
-      // Teleportation sanity: if distance > 100m and speed > 33.3 m/s (120 km/h), reject glitch
-      if (elapsedSec > 0 && distFromLast > 100.0 && (distFromLast / elapsedSec) > 33.3) {
+      // Teleportation sanity: if distance > 100m and speed > 35 m/s (126 km/h), reject glitch
+      if (elapsedSec > 0 && distFromLast > 100.0 && (distFromLast / elapsedSec) > 35.0) {
         debugPrint("LocationService: rejected teleportation glitch: $distFromLast m in $elapsedSec s");
         return;
-      }
-
-      final speedKmh = pos.speed * 3.6;
-      // If stationary / office pacing (moved < 10m and speed < 2.0 km/h), suppress drift
-      if (distFromLast < 10.0 && speedKmh < 2.0) {
-        // Stationary: only heartbeat every 3 minutes if stopped
-        if (_lastSavedTime != null && now.difference(_lastSavedTime!).inMinutes < 3) {
-          return;
-        }
       }
     }
 

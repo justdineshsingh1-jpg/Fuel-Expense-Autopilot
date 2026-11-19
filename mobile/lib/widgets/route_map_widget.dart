@@ -109,6 +109,22 @@ class _RouteMapWidgetState extends State<RouteMapWidget> {
         pts.add(LatLng(lat, lng));
       }
     }
+
+    // Anti-Spider-Web Check:
+    // If all points are clustered within 50 meters of start point (e.g. sitting at desk),
+    // collapse to a single anchor point so messy indoor bounces are not drawn as roads.
+    if (pts.isNotEmpty) {
+      final first = pts.first;
+      final bool hasLeftAnchor = pts.any(
+        (p) => Geolocator.distanceBetween(first.latitude, first.longitude, p.latitude, p.longitude) >= 50.0
+      );
+      if (!hasLeftAnchor) {
+        _points = [first];
+        _calculatedTrackKm = 0.0;
+        return;
+      }
+    }
+
     _computeDistance(pts);
     _points = pts;
   }

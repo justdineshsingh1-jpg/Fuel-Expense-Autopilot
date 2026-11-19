@@ -94,5 +94,32 @@ void main() {
       final isClustered = latDiff < 0.0015 && lngDiff < 0.0015;
       expect(isClustered, isTrue);
     });
+
+    test('Anti-Spider-Web: Collapses 54 indoor bouncing coordinates to 0.0 KM', () {
+      const officeAnchor = LatLng(26.136200, 91.792400);
+      final List<LatLng> indoorBounces = [];
+      // Generate 54 points bouncing within 35 meters
+      for (int i = 0; i < 54; i++) {
+        final offset = (i % 2 == 0 ? 0.0002 : -0.0002) * (i / 54.0);
+        indoorBounces.add(LatLng(officeAnchor.latitude + offset, officeAnchor.longitude + offset));
+      }
+
+      final bool hasLeftAnchor = indoorBounces.any(
+        (p) => Geolocator.distanceBetween(officeAnchor.latitude, officeAnchor.longitude, p.latitude, p.longitude) >= 50.0
+      );
+
+      expect(hasLeftAnchor, isFalse); // Never left office compound
+    });
+
+    test('Road trip breakout: Rider moving down street breaks out of anchor zone', () {
+      const startPt = LatLng(27.492400, 95.346800); // Tinsukia start
+      const downStreet1 = LatLng(27.493000, 95.347500); // ~100m away down street
+
+      final dist = Geolocator.distanceBetween(startPt.latitude, startPt.longitude, downStreet1.latitude, downStreet1.longitude);
+      final bool hasLeftAnchor = dist >= 50.0;
+
+      expect(dist, greaterThan(50.0));
+      expect(hasLeftAnchor, isTrue); // Road trip successfully begins
+    });
   });
 }

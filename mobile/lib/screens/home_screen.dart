@@ -257,6 +257,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final TextEditingController endOdoController = TextEditingController();
     String? capturedImageUrl;
     bool isEnding = false;
+    String? validationError;
     final tripProv = Provider.of<TripProvider>(context, listen: false);
     final double startReadingVal = double.tryParse(tripProv.startReading) ?? 0.0;
 
@@ -306,8 +307,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     TextField(
                       controller: endOdoController,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      onChanged: (_) {
+                        if (validationError != null) {
+                          modalSetState(() { validationError = null; });
+                        }
+                      },
                       decoration: InputDecoration(
-                        hintText: 'Must be >= ${startReadingVal.toStringAsFixed(0)} KM',
+                        hintText: 'e.g. ${(startReadingVal + 10).toStringAsFixed(0)} (Must be >= ${startReadingVal.toStringAsFixed(0)})',
                         border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       ),
@@ -319,7 +325,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       onTap: isEnding ? null : () async {
                         final url = await CameraUtils.showPhotoSourceDialog(context, title: 'End Dashboard Photo');
                         if (url != null) {
-                          modalSetState(() { capturedImageUrl = url; });
+                          modalSetState(() {
+                            capturedImageUrl = url;
+                            validationError = null;
+                          });
                         }
                       },
                       child: Container(
@@ -327,7 +336,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         width: double.infinity,
                         decoration: BoxDecoration(
                           color: Colors.grey[100],
-                          border: Border.all(color: Colors.grey[300]!, style: BorderStyle.solid),
+                          border: Border.all(
+                            color: (validationError != null && capturedImageUrl == null) ? Colors.red : Colors.grey[300]!,
+                            width: (validationError != null && capturedImageUrl == null) ? 1.5 : 1.0,
+                          ),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: capturedImageUrl != null 
@@ -345,7 +357,32 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 16),
+
+                    // In-modal Visible Error Box
+                    if (validationError != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        margin: const EdgeInsets.only(bottom: 14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF2F2),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFFCA5A5)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.error_outline, color: Color(0xFFDC2626), size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                validationError!,
+                                style: const TextStyle(color: Color(0xFFB91C1C), fontSize: 13, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
@@ -358,23 +395,29 @@ class _HomeScreenState extends State<HomeScreen> {
                           final readingStr = endOdoController.text.trim();
                           final endVal = double.tryParse(readingStr);
                           if (endVal == null || endVal <= 0) {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a valid ending odometer reading.')));
+                            modalSetState(() {
+                              validationError = 'Please enter a valid ending odometer reading.';
+                            });
                             return;
                           }
                           if (capturedImageUrl == null) {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please capture end dashboard photo.')));
+                            modalSetState(() {
+                              validationError = 'Please capture the end dashboard photo before ending.';
+                            });
                             return;
                           }
 
                           if (endVal < startReadingVal) {
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                              content: Text('End reading ($endVal KM) cannot be less than start reading ($startReadingVal KM)!'),
-                              backgroundColor: Colors.red,
-                            ));
+                            modalSetState(() {
+                              validationError = 'End reading (${endVal.toStringAsFixed(0)} KM) cannot be less than start reading (${startReadingVal.toStringAsFixed(0)} KM)!';
+                            });
                             return;
                           }
 
-                          modalSetState(() { isEnding = true; });
+                          modalSetState(() {
+                            isEnding = true;
+                            validationError = null;
+                          });
                           final img = capturedImageUrl!;
                           final messenger = ScaffoldMessenger.of(context);
                           final tripProv = Provider.of<TripProvider>(context, listen: false);
@@ -396,7 +439,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               backgroundColor: ok ? Colors.green : Colors.orange,
                             ));
                           } catch (err) {
-                            modalSetState(() { isEnding = false; });
+                            if (ctx.mounted) {
+                              modalSetState(() { isEnding = false; });
+                            }
                             messenger.showSnackBar(SnackBar(
                               content: Text('Error ending shift: $err'),
                               backgroundColor: Colors.red,
@@ -404,7 +449,14 @@ class _HomeScreenState extends State<HomeScreen> {
                           }
                         },
                         child: isEnding
-                          ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                          ? const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)),
+                                SizedBox(width: 10),
+                                Text('Ending Shift & Submitting...', style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold)),
+                              ],
+                            )
                           : const Text('Confirm & End Trip', style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold)),
                       ),
                     ),

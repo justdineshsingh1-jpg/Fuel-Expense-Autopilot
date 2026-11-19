@@ -166,7 +166,12 @@ class TripProvider with ChangeNotifier {
         _currentAddress = address;
       }
 
-      // If this is the very first waypoint
+      // 1. Accuracy Filter:
+      // In field conditions across Indian towns, outdoor GPS is typically 30m - 90m.
+      // Accept up to 100m. Discard cellular tower triangulation (> 100m).
+      if (pos.accuracy > 100.0) return;
+
+      // 2. Initial Anchor Point:
       if (_currentWaypoints.isEmpty) {
         _currentWaypoints.add({
           'lat': pos.latitude,
@@ -184,11 +189,37 @@ class TripProvider with ChangeNotifier {
         return;
       }
 
+      final startPt = _currentWaypoints.first;
+      final startLat = (startPt['lat'] as num).toDouble();
+      final startLng = (startPt['lng'] as num).toDouble();
+
+      final distFromStart = Geolocator.distanceBetween(
+        startLat,
+        startLng,
+        pos.latitude,
+        pos.longitude,
+      );
+
+      // 3. ANCHOR ZONE (Anti-Spider-Web Filter):
+      // If the user has only 1 waypoint and has not yet left the starting compound
+      // (within 50 meters of starting desk/parking), DO NOT accumulate distance or spider-webs!
+      if (_currentWaypoints.length == 1 && distFromStart < 50.0) {
+        // Keep desk anchor accurate without adding fake distance or lines
+        _currentWaypoints[0]['accuracy'] = pos.accuracy;
+        _currentWaypoints[0]['lat'] = pos.latitude;
+        _currentWaypoints[0]['lng'] = pos.longitude;
+        _liveDistance = 0.0;
+        _ensureActiveTripInList();
+        _saveActiveTripLocally();
+        notifyListeners();
+        return;
+      }
+
       final last = _currentWaypoints.last;
       final lastLat = (last['lat'] as num).toDouble();
       final lastLng = (last['lng'] as num).toDouble();
 
-      final distMeters = Geolocator.distanceBetween(
+      final distFromLast = Geolocator.distanceBetween(
         lastLat,
         lastLng,
         pos.latitude,
@@ -199,22 +230,17 @@ class TripProvider with ChangeNotifier {
       DateTime lastTime = DateTime.tryParse(last['timestamp']?.toString() ?? '') ?? DateTime.now();
       final deltaSec = DateTime.now().difference(lastTime).inSeconds.abs();
 
-      // 1. REJECT TELEPORTATION / CELL TOWER SPIKES:
-      // If implied speed > 120 km/h (33.3 m/s), reject as cellular tower switch or GPS glitch
-      if (deltaSec > 0 && (distMeters / deltaSec) > 33.3) {
-        debugPrint("Rejected teleportation spike: $distMeters m in $deltaSec s");
+      // 4. TELEPORTATION REJECTION:
+      // If implied speed > 126 km/h (35 m/s), reject as cellular tower switch or GPS glitch
+      if (deltaSec > 0 && distFromLast > 100.0 && (distFromLast / deltaSec) > 35.0) {
+        debugPrint("Rejected teleportation spike: $distFromLast m in $deltaSec s");
         return;
       }
 
-      // 2. REJECT INDOOR / STATIONARY OFFICE DRIFT:
-      // Walking in office or sitting down produces drift. Require real travel:
-      // either dist >= 15m AND speed >= 0.8 m/s (~2.8 km/h), OR dist >= 35m (vehicle moving forward).
-      final isRealMovement = (distMeters >= 15.0 && pos.speed >= 0.8) || distMeters >= 35.0;
-
-      // 3. HARDWARE ACCURACY FILTER:
-      // Accumulate distance ONLY if accuracy is good (<= 45m).
-      if (isRealMovement && pos.accuracy <= 45.0) {
-        _liveDistance += (distMeters / 1000.0);
+      // 5. ROAD MOVEMENT ACCUMULATION:
+      // To record real road travel (bike/car), point must have moved at least 15 meters from previous waypoint.
+      if (distFromLast >= 15.0) {
+        _liveDistance += (distFromLast / 1000.0);
         _currentWaypoints.add({
           'lat': pos.latitude,
           'lng': pos.longitude,
@@ -224,20 +250,15 @@ class TripProvider with ChangeNotifier {
           'accuracy': pos.accuracy,
           'speed': pos.speed,
         });
-      } else if (_currentWaypoints.length == 1 && distMeters < 15.0) {
-        // Just sitting at start point: update address/accuracy without adding distance
-        _currentWaypoints[0]['accuracy'] = pos.accuracy;
-        _currentWaypoints[0]['lat'] = pos.latitude;
-        _currentWaypoints[0]['lng'] = pos.longitude;
-      }
 
-      _ensureActiveTripInList();
-      _saveActiveTripLocally();
-      notifyListeners();
+        _ensureActiveTripInList();
+        _saveActiveTripLocally();
+        notifyListeners();
 
-      // Periodically sync waypoints to server every 15 waypoints so server always has live track
-      if (_isTripActive && _activeTripId != null && _currentWaypoints.length % 15 == 0) {
-        _syncActiveWaypointsToServer();
+        // Periodically sync waypoints to server every 10 waypoints
+        if (_isTripActive && _activeTripId != null && _currentWaypoints.length % 10 == 0) {
+          _syncActiveWaypointsToServer();
+        }
       }
     });
   }
