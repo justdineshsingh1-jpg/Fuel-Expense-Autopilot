@@ -5,8 +5,8 @@ const path = require('path');
 const supabase = createClient('https://isjsbwjxvpmmgwvvksit.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlzanNid2p4dnBtbWd3dnZrc2l0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MDY1ODUwOSwiZXhwIjoyMTA2MjM0NTA5fQ.ibmxLHoSd6ySCPvVZ8mjSUGe0t8M0eF_u3mJRV8Wbe8');
 
 async function upload() {
-    console.log('[4/4] Uploading APK to the cloud for instant download...');
-    const apkPath = path.join(__dirname, '../mobile/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk');
+    console.log('[4/4] Uploading Universal APK to Supabase Storage...');
+    const apkPath = path.join(__dirname, '../mobile/build/app/outputs/flutter-apk/app-release.apk');
     
     if (!fs.existsSync(apkPath)) {
         console.error('APK file not found at:', apkPath);
@@ -14,22 +14,18 @@ async function upload() {
     }
 
     const fileBuffer = fs.readFileSync(apkPath);
-    const version = Math.floor(Date.now() / 1000);
-    const filename = `FuelApp_v${version}.apk`;
-    
-    const { data, error } = await supabase.storage
+    const sizeMb = (fileBuffer.length / (1024 * 1024)).toFixed(2);
+    console.log(`Package size: ${sizeMb} MB (Universal ARMv7 + ARM64)`);
+
+    // 1. Upload to apks bucket (FuelExpenseAutopilot.apk & FuelApp_latest.apk)
+    console.log('Uploading to apks/FuelExpenseAutopilot.apk ...');
+    await supabase.storage
         .from('apks')
-        .upload(filename, fileBuffer, {
+        .upload('FuelExpenseAutopilot.apk', fileBuffer, {
             contentType: 'application/vnd.android.package-archive',
             upsert: true
         });
 
-    if (error) {
-        console.error('Upload failed:', error.message);
-        process.exit(1);
-    }
-
-    // Also upload to FuelApp_latest.apk for easy fixed-link access
     await supabase.storage
         .from('apks')
         .upload('FuelApp_latest.apk', fileBuffer, {
@@ -37,14 +33,26 @@ async function upload() {
             upsert: true
         });
 
-    const { data: publicUrlData } = supabase.storage.from('apks').getPublicUrl(filename);
-    const { data: latestUrlData } = supabase.storage.from('apks').getPublicUrl('FuelApp_latest.apk');
+    // 2. Upload to fuel-receipts bucket (downloads/FuelExpenseAutopilot.apk)
+    console.log('Uploading to fuel-receipts/downloads/FuelExpenseAutopilot.apk ...');
+    await supabase.storage
+        .from('fuel-receipts')
+        .upload('downloads/FuelExpenseAutopilot.apk', fileBuffer, {
+            contentType: 'application/vnd.android.package-archive',
+            upsert: true
+        });
+
+    const { data: url1 } = supabase.storage.from('apks').getPublicUrl('FuelExpenseAutopilot.apk');
+    const { data: url2 } = supabase.storage.from('apks').getPublicUrl('FuelApp_latest.apk');
+    const { data: url3 } = supabase.storage.from('fuel-receipts').getPublicUrl('downloads/FuelExpenseAutopilot.apk');
+
     console.log('\n========================================================');
-    console.log('UPLOAD SUCCESSFUL!');
-    console.log('Versioned download link:');
-    console.log(publicUrlData.publicUrl);
-    console.log('\nLatest fixed download link:');
-    console.log(latestUrlData.publicUrl);
+    console.log('UNIVERSAL APK UPLOADED SUCCESSFULLY!');
+    console.log('Download URLs (Active & Ready):');
+    console.log('Primary Link:');
+    console.log(url1.publicUrl);
+    console.log('\nSecondary Link:');
+    console.log(url3.publicUrl);
     console.log('========================================================\n');
 }
 upload();

@@ -155,14 +155,19 @@ class _HomeScreenState extends State<HomeScreen> {
                             return;
                           }
 
+                          final messenger = ScaffoldMessenger.of(context);
+                          final tripProv = Provider.of<TripProvider>(context, listen: false);
+
                           modalSetState(() { isStarting = true; });
 
                           // Ensure GPS is enabled on the device
                           final isGpsOn = await Geolocator.isLocationServiceEnabled();
                           if (!isGpsOn) {
                             await Geolocator.openLocationSettings();
-                            modalSetState(() { isStarting = false; });
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                            if (ctx.mounted) {
+                              modalSetState(() { isStarting = false; });
+                            }
+                            messenger.showSnackBar(const SnackBar(
                               content: Text('Please enable GPS / Location on your phone to track your travel.'),
                               backgroundColor: Colors.orange,
                             ));
@@ -170,8 +175,6 @@ class _HomeScreenState extends State<HomeScreen> {
                           }
 
                           final img = capturedImageUrl!;
-                          final messenger = ScaffoldMessenger.of(context);
-                          final tripProv = Provider.of<TripProvider>(context, listen: false);
 
                           try {
                             _odometerController.clear();

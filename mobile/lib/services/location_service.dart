@@ -41,8 +41,8 @@ class LocationService {
         // Fallback to last known position if recent
         try {
           final lastKnown = await Geolocator.getLastKnownPosition();
-          if (lastKnown != null && lastKnown.timestamp != null) {
-            final ageInMins = DateTime.now().difference(lastKnown.timestamp!).inMinutes;
+          if (lastKnown != null) {
+            final ageInMins = DateTime.now().difference(lastKnown.timestamp).inMinutes;
             if (ageInMins < 15) {
               _processLocation(lastKnown, onLocationUpdate, isInitial: true);
             }
