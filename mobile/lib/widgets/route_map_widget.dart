@@ -42,7 +42,9 @@ class _RouteMapWidgetState extends State<RouteMapWidget> {
   @override
   void didUpdateWidget(covariant RouteMapWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.waypoints != oldWidget.waypoints || widget.tripId != oldWidget.tripId) {
+    final countChanged = (widget.waypoints?.length ?? 0) != (oldWidget.waypoints?.length ?? 0);
+    final idChanged = widget.tripId != oldWidget.tripId;
+    if (countChanged || idChanged) {
       _loadRouteData();
     }
   }
@@ -128,15 +130,25 @@ class _RouteMapWidgetState extends State<RouteMapWidget> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_points.isEmpty || !mounted) return;
       if (_points.length == 1) {
-        _mapController.move(_points.first, 15.0);
+        _mapController.move(_points.first, 16.0);
         return;
       }
 
       final bounds = LatLngBounds.fromPoints(_points);
+      final latDiff = (bounds.north - bounds.south).abs();
+      final lngDiff = (bounds.east - bounds.west).abs();
+
+      // If points are clustered in one spot (e.g. sitting in office, diff < ~150m)
+      if (latDiff < 0.0015 && lngDiff < 0.0015) {
+        _mapController.move(_points.last, 16.0);
+        return;
+      }
+
       _mapController.fitCamera(
         CameraFit.bounds(
           bounds: bounds,
-          padding: const EdgeInsets.all(40),
+          padding: const EdgeInsets.all(35),
+          maxZoom: 17.0,
         ),
       );
     });
@@ -218,17 +230,20 @@ class _RouteMapWidgetState extends State<RouteMapWidget> {
                             mapController: _mapController,
                             options: MapOptions(
                               initialCenter: _points.isNotEmpty
-                                  ? _points.first
+                                  ? _points.last
                                   : const LatLng(27.4924, 95.3468), // Tinsukia fallback
-                              initialZoom: 13.0,
+                              initialZoom: 15.5,
+                              maxZoom: 19.0,
+                              minZoom: 4.0,
                               interactionOptions: const InteractionOptions(
                                 flags: InteractiveFlag.all,
                               ),
                             ),
                             children: [
                               TileLayer(
-                                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                                userAgentPackageName: 'com.example.mobile',
+                                urlTemplate: 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
+                                maxZoom: 20,
+                                userAgentPackageName: 'com.dhanpurna.fuelapp',
                               ),
                               PolylineLayer(
                                 polylines: [

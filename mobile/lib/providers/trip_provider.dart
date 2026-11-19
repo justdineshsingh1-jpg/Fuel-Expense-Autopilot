@@ -162,31 +162,74 @@ class TripProvider with ChangeNotifier {
 
   void _startGpsTracker() {
     _locationService.startBackgroundTracking((Position pos, String mode, String? address) {
-      if (_currentWaypoints.isNotEmpty) {
-        final last = _currentWaypoints.last;
-        final dist = Geolocator.distanceBetween(
-          (last['lat'] as num).toDouble(), 
-          (last['lng'] as num).toDouble(), 
-          pos.latitude, 
-          pos.longitude
-        );
-        // Only accumulate distance if movement is real (>= 6 meters) to avoid stationary GPS jitter
-        if (dist >= 6.0) {
-          _liveDistance += (dist / 1000.0);
-        }
-      }
       if (address != null && address.isNotEmpty) {
         _currentAddress = address;
       }
-      _currentWaypoints.add({
-        'lat': pos.latitude,
-        'lng': pos.longitude,
-        'mode': mode,
-        if (address != null) 'address': address,
-        'timestamp': DateTime.now().toIso8601String(),
-        'accuracy': pos.accuracy,
-        'speed': pos.speed,
-      });
+
+      // If this is the very first waypoint
+      if (_currentWaypoints.isEmpty) {
+        _currentWaypoints.add({
+          'lat': pos.latitude,
+          'lng': pos.longitude,
+          'mode': mode,
+          if (address != null) 'address': address,
+          'timestamp': DateTime.now().toIso8601String(),
+          'accuracy': pos.accuracy,
+          'speed': pos.speed,
+        });
+        _liveDistance = 0.0;
+        _ensureActiveTripInList();
+        _saveActiveTripLocally();
+        notifyListeners();
+        return;
+      }
+
+      final last = _currentWaypoints.last;
+      final lastLat = (last['lat'] as num).toDouble();
+      final lastLng = (last['lng'] as num).toDouble();
+
+      final distMeters = Geolocator.distanceBetween(
+        lastLat,
+        lastLng,
+        pos.latitude,
+        pos.longitude,
+      );
+
+      // Parse time delta
+      DateTime lastTime = DateTime.tryParse(last['timestamp']?.toString() ?? '') ?? DateTime.now();
+      final deltaSec = DateTime.now().difference(lastTime).inSeconds.abs();
+
+      // 1. REJECT TELEPORTATION / CELL TOWER SPIKES:
+      // If implied speed > 120 km/h (33.3 m/s), reject as cellular tower switch or GPS glitch
+      if (deltaSec > 0 && (distMeters / deltaSec) > 33.3) {
+        debugPrint("Rejected teleportation spike: $distMeters m in $deltaSec s");
+        return;
+      }
+
+      // 2. REJECT INDOOR / STATIONARY OFFICE DRIFT:
+      // Walking in office or sitting down produces drift. Require real travel:
+      // either dist >= 15m AND speed >= 0.8 m/s (~2.8 km/h), OR dist >= 35m (vehicle moving forward).
+      final isRealMovement = (distMeters >= 15.0 && pos.speed >= 0.8) || distMeters >= 35.0;
+
+      // 3. HARDWARE ACCURACY FILTER:
+      // Accumulate distance ONLY if accuracy is good (<= 45m).
+      if (isRealMovement && pos.accuracy <= 45.0) {
+        _liveDistance += (distMeters / 1000.0);
+        _currentWaypoints.add({
+          'lat': pos.latitude,
+          'lng': pos.longitude,
+          'mode': mode,
+          if (address != null) 'address': address,
+          'timestamp': DateTime.now().toIso8601String(),
+          'accuracy': pos.accuracy,
+          'speed': pos.speed,
+        });
+      } else if (_currentWaypoints.length == 1 && distMeters < 15.0) {
+        // Just sitting at start point: update address/accuracy without adding distance
+        _currentWaypoints[0]['accuracy'] = pos.accuracy;
+        _currentWaypoints[0]['lat'] = pos.latitude;
+        _currentWaypoints[0]['lng'] = pos.longitude;
+      }
 
       _ensureActiveTripInList();
       _saveActiveTripLocally();

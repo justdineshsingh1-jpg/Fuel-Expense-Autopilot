@@ -36,14 +36,16 @@ class LocationService {
           desiredAccuracy: LocationAccuracy.high,
           timeLimit: const Duration(seconds: 6),
         );
-        _processLocation(initialPos, onLocationUpdate, isInitial: true);
+        if (initialPos.accuracy <= 80.0) {
+          _processLocation(initialPos, onLocationUpdate, isInitial: true);
+        }
       } catch (_) {
-        // Fallback to last known position if recent
+        // Fallback to last known position ONLY if very fresh (< 60s) and accurate (<= 50m)
         try {
           final lastKnown = await Geolocator.getLastKnownPosition();
           if (lastKnown != null) {
-            final ageInMins = DateTime.now().difference(lastKnown.timestamp).inMinutes;
-            if (ageInMins < 15) {
+            final ageInSec = DateTime.now().difference(lastKnown.timestamp).inSeconds.abs();
+            if (ageInSec < 60 && lastKnown.accuracy <= 50.0) {
               _processLocation(lastKnown, onLocationUpdate, isInitial: true);
             }
           }
@@ -94,8 +96,7 @@ class LocationService {
 
     DateTime now = DateTime.now();
 
-    // 2. Anti-drift check:
-    // If phone is stationary (moved less than 5m and speed < 1.5 km/h), skip recording to avoid phantom KM
+    // 2. Anti-drift & Teleportation check:
     if (_lastSavedPos != null && !isInitial) {
       final distFromLast = Geolocator.distanceBetween(
         _lastSavedPos!.latitude,
@@ -104,8 +105,16 @@ class LocationService {
         pos.longitude,
       );
 
+      final elapsedSec = now.difference(_lastSavedTime ?? now).inSeconds.abs();
+      // Teleportation sanity: if distance > 100m and speed > 33.3 m/s (120 km/h), reject glitch
+      if (elapsedSec > 0 && distFromLast > 100.0 && (distFromLast / elapsedSec) > 33.3) {
+        debugPrint("LocationService: rejected teleportation glitch: $distFromLast m in $elapsedSec s");
+        return;
+      }
+
       final speedKmh = pos.speed * 3.6;
-      if (distFromLast < 6.0 && speedKmh < 1.5) {
+      // If stationary / office pacing (moved < 10m and speed < 2.0 km/h), suppress drift
+      if (distFromLast < 10.0 && speedKmh < 2.0) {
         // Stationary: only heartbeat every 3 minutes if stopped
         if (_lastSavedTime != null && now.difference(_lastSavedTime!).inMinutes < 3) {
           return;
@@ -151,17 +160,24 @@ class LocationService {
 
   Future<Position?> getCurrentPositionSafe() async {
     try {
-      return await Geolocator.getCurrentPosition(
+      final pos = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 8),
+        timeLimit: const Duration(seconds: 6),
       );
-    } catch (_) {
-      try {
-        return await Geolocator.getLastKnownPosition();
-      } catch (_) {
-        return null;
+      if (pos.accuracy <= 80.0) return pos;
+    } catch (_) {}
+
+    // Only accept last known position if very fresh (< 60s) and accurate (<= 50m)
+    try {
+      final lastKnown = await Geolocator.getLastKnownPosition();
+      if (lastKnown != null) {
+        final ageInSec = DateTime.now().difference(lastKnown.timestamp).inSeconds.abs();
+        if (ageInSec < 60 && lastKnown.accuracy <= 50.0) {
+          return lastKnown;
+        }
       }
-    }
+    } catch (_) {}
+    return null;
   }
 
   Future<Position> getCurrentLocation() async {
