@@ -5,6 +5,7 @@ import 'dart:async';
 
 class LocationService {
   StreamSubscription<Position>? _positionStream;
+  Timer? _keepAliveTimer;
   
   // Tracker State
   Position? _lastSavedPos;
@@ -16,7 +17,6 @@ class LocationService {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         debugPrint('Location services are disabled on device.');
-        // Request enabling
         serviceEnabled = await Geolocator.openLocationSettings();
       }
 
@@ -36,16 +36,15 @@ class LocationService {
           desiredAccuracy: LocationAccuracy.high,
           timeLimit: const Duration(seconds: 6),
         );
-        if (initialPos.accuracy <= 80.0) {
+        if (initialPos.accuracy <= 160.0) {
           _processLocation(initialPos, onLocationUpdate, isInitial: true);
         }
       } catch (_) {
-        // Fallback to last known position ONLY if very fresh (< 60s) and accurate (<= 50m)
         try {
           final lastKnown = await Geolocator.getLastKnownPosition();
           if (lastKnown != null) {
             final ageInSec = DateTime.now().difference(lastKnown.timestamp).inSeconds.abs();
-            if (ageInSec < 60 && lastKnown.accuracy <= 50.0) {
+            if (ageInSec < 120 && lastKnown.accuracy <= 100.0) {
               _processLocation(lastKnown, onLocationUpdate, isInitial: true);
             }
           }
@@ -54,6 +53,23 @@ class LocationService {
 
       // Start continuous high-fidelity stream (8m filter, 5s interval for smooth route lines)
       _startStream(8, onLocationUpdate);
+
+      // Start keep-alive periodic polling (every 12 seconds)
+      // This prevents Android OS from suspending GPS when the screen is locked in the rider's pocket
+      _keepAliveTimer?.cancel();
+      _keepAliveTimer = Timer.periodic(const Duration(seconds: 12), (_) async {
+        if (_positionStream == null) return;
+        try {
+          final p = await Geolocator.getCurrentPosition(
+            desiredAccuracy: LocationAccuracy.high,
+            timeLimit: const Duration(seconds: 6),
+          );
+          if (p.accuracy <= 160.0) {
+            _processLocation(p, onLocationUpdate);
+          }
+        } catch (_) {}
+      });
+
       return true;
     } catch (e) {
       debugPrint("startBackgroundTracking error: $e");
@@ -70,7 +86,7 @@ class LocationService {
       intervalDuration: const Duration(seconds: 5),
       forceLocationManager: false, // FusedLocationProvider for seamless battery-friendly GPS
       foregroundNotificationConfig: const ForegroundNotificationConfig(
-        notificationText: "Tracking your trip route in the background.",
+        notificationText: "Recording active trip route...",
         notificationTitle: "Fuel Expense Autopilot Active",
         enableWakeLock: true,
       ),
@@ -89,12 +105,12 @@ class LocationService {
 
   void _processLocation(Position pos, Function(Position, String, String?) onLocationUpdate, {bool isInitial = false}) {
     // 1. Hardware Accuracy Filter:
-    // Realistic outdoor mobile accuracy in Indian field environments is up to 100m.
-    // Discard only clear cell-tower triangulation spikes (> 100m).
-    final maxAllowedAccuracy = isInitial ? 120.0 : 100.0;
+    // Outdoor mobile accuracy in pocket/pouch or rural highway is typically up to 160m.
+    // Discard only cell-tower triangulation spikes (> 160m).
+    final maxAllowedAccuracy = isInitial ? 160.0 : 160.0;
     if (pos.accuracy > maxAllowedAccuracy) return;
 
-    DateTime now = DateTime.now();
+    final posTime = pos.timestamp;
 
     // 2. Teleportation sanity check:
     if (_lastSavedPos != null && !isInitial) {
@@ -105,16 +121,25 @@ class LocationService {
         pos.longitude,
       );
 
-      final elapsedSec = now.difference(_lastSavedTime ?? now).inSeconds.abs();
-      // Teleportation sanity: if distance > 100m and speed > 35 m/s (126 km/h), reject glitch
-      if (elapsedSec > 0 && distFromLast > 100.0 && (distFromLast / elapsedSec) > 35.0) {
-        debugPrint("LocationService: rejected teleportation glitch: $distFromLast m in $elapsedSec s");
+      final elapsedSec = posTime.difference(_lastSavedTime ?? posTime).inSeconds.abs();
+
+      // If Doppler hardware speed indicates realistic road speed (<= 45 m/s or 162 km/h), accept
+      final bool hardwareSpeedValid = (pos.speed > 0 && pos.speed <= 45.0);
+
+      // Only reject if elapsedSec is positive and calculated speed exceeds 45 m/s (162 km/h) without hardware confirmation
+      if (!hardwareSpeedValid && elapsedSec > 0 && distFromLast > 150.0 && (distFromLast / elapsedSec) > 45.0) {
+        debugPrint("LocationService: rejected teleportation spike: $distFromLast m in $elapsedSec s");
+        // Reset reference if stale (> 5 minutes) so tracking does not lock out permanently
+        if (elapsedSec > 300) {
+          _lastSavedPos = pos;
+          _lastSavedTime = posTime;
+        }
         return;
       }
     }
 
     _lastSavedPos = pos;
-    _lastSavedTime = now;
+    _lastSavedTime = posTime;
 
     // 3. Reverse Geocode Address Check (Trigger on initial point or every 3 kilometers)
     double distanceSinceLastGeocode = 99999;
@@ -127,7 +152,7 @@ class LocationService {
       );
     }
 
-    final mode = (pos.speed * 3.6 > 20) ? 'transit' : 'survey';
+    final mode = (pos.speed * 3.6 > 18) ? 'transit' : 'survey';
 
     if (isInitial || distanceSinceLastGeocode >= 3000) {
       _lastGeocodedPos = pos;
@@ -142,6 +167,8 @@ class LocationService {
   }
 
   void stopTracking() {
+    _keepAliveTimer?.cancel();
+    _keepAliveTimer = null;
     _positionStream?.cancel();
     _positionStream = null;
     _lastSavedPos = null;
@@ -155,15 +182,14 @@ class LocationService {
         desiredAccuracy: LocationAccuracy.high,
         timeLimit: const Duration(seconds: 6),
       );
-      if (pos.accuracy <= 80.0) return pos;
+      if (pos.accuracy <= 160.0) return pos;
     } catch (_) {}
 
-    // Only accept last known position if very fresh (< 60s) and accurate (<= 50m)
     try {
       final lastKnown = await Geolocator.getLastKnownPosition();
       if (lastKnown != null) {
         final ageInSec = DateTime.now().difference(lastKnown.timestamp).inSeconds.abs();
-        if (ageInSec < 60 && lastKnown.accuracy <= 50.0) {
+        if (ageInSec < 120 && lastKnown.accuracy <= 120.0) {
           return lastKnown;
         }
       }
@@ -182,7 +208,6 @@ class LocationService {
       List<Placemark> placemarks = await placemarkFromCoordinates(lat, lng);
       if (placemarks.isNotEmpty) {
         Placemark place = placemarks[0];
-        // Clean address formatting (e.g. GS Road, Ganeshguri, Assam)
         List<String> parts = [];
         if (place.street != null && place.street!.isNotEmpty) parts.add(place.street!);
         if (place.subLocality != null && place.subLocality!.isNotEmpty) parts.add(place.subLocality!);

@@ -30,6 +30,10 @@ class TripProvider with ChangeNotifier {
   String? _fuelBillUrl;
   String? _miscBillUrl;
 
+  // Stationary & Anti-Spider-Web Anchor
+  double? _stationaryAnchorLat;
+  double? _stationaryAnchorLng;
+
   // Persistence Key
   static const String _activeTripPrefsKey = 'persisted_active_trip_state';
   DateTime? _activeTripStartedAt;
@@ -146,6 +150,10 @@ class TripProvider with ChangeNotifier {
           _currentWaypoints = List<Map<String, dynamic>>.from(
             (data['waypoints'] as List).map((w) => Map<String, dynamic>.from(w))
           );
+          if (_currentWaypoints.isNotEmpty) {
+            _stationaryAnchorLat = (_currentWaypoints.last['lat'] as num).toDouble();
+            _stationaryAnchorLng = (_currentWaypoints.last['lng'] as num).toDouble();
+          }
         }
 
         // Resume GPS Tracking seamlessly
@@ -167,18 +175,21 @@ class TripProvider with ChangeNotifier {
       }
 
       // 1. Accuracy Filter:
-      // In field conditions across Indian towns, outdoor GPS is typically 30m - 90m.
-      // Accept up to 100m. Discard cellular tower triangulation (> 100m).
-      if (pos.accuracy > 100.0) return;
+      // In field conditions across Indian towns and highways, accept up to 160m.
+      if (pos.accuracy > 160.0) return;
+
+      final posTime = pos.timestamp;
 
       // 2. Initial Anchor Point:
       if (_currentWaypoints.isEmpty) {
+        _stationaryAnchorLat = pos.latitude;
+        _stationaryAnchorLng = pos.longitude;
         _currentWaypoints.add({
           'lat': pos.latitude,
           'lng': pos.longitude,
           'mode': mode,
           if (address != null) 'address': address,
-          'timestamp': DateTime.now().toIso8601String(),
+          'timestamp': posTime.toIso8601String(),
           'accuracy': pos.accuracy,
           'speed': pos.speed,
         });
@@ -189,32 +200,35 @@ class TripProvider with ChangeNotifier {
         return;
       }
 
-      final startPt = _currentWaypoints.first;
-      final startLat = (startPt['lat'] as num).toDouble();
-      final startLng = (startPt['lng'] as num).toDouble();
+      _stationaryAnchorLat ??= (_currentWaypoints.first['lat'] as num).toDouble();
+      _stationaryAnchorLng ??= (_currentWaypoints.first['lng'] as num).toDouble();
 
-      final distFromStart = Geolocator.distanceBetween(
-        startLat,
-        startLng,
+      final distFromAnchor = Geolocator.distanceBetween(
+        _stationaryAnchorLat!,
+        _stationaryAnchorLng!,
         pos.latitude,
         pos.longitude,
       );
 
-      // 3. ANCHOR ZONE (Anti-Spider-Web Filter):
-      // If the user has only 1 waypoint and has not yet left the starting compound
-      // (within 50 meters of starting desk/parking), DO NOT accumulate distance or spider-webs!
-      if (_currentWaypoints.length == 1 && distFromStart < 50.0) {
-        // Keep desk anchor accurate without adding fake distance or lines
-        _currentWaypoints[0]['accuracy'] = pos.accuracy;
-        _currentWaypoints[0]['lat'] = pos.latitude;
-        _currentWaypoints[0]['lng'] = pos.longitude;
-        _liveDistance = 0.0;
+      // 3. ANTI-STATIONARY DRIFT & ANTI-SPIDER-WEB:
+      // When agent is stationary (office desk, standing at home, speed < 1.2 m/s / 4.3 km/h)
+      // and within 45m of the stationary anchor, DO NOT accumulate road distance or lines!
+      final bool isStationary = (pos.speed < 1.2 && distFromAnchor < 45.0);
+      if (isStationary) {
+        if (_currentWaypoints.length == 1) {
+          _currentWaypoints[0]['lat'] = pos.latitude;
+          _currentWaypoints[0]['lng'] = pos.longitude;
+          _currentWaypoints[0]['accuracy'] = pos.accuracy;
+          _liveDistance = 0.0;
+        }
         _ensureActiveTripInList();
         _saveActiveTripLocally();
         notifyListeners();
         return;
       }
 
+      // 4. MOVING ROAD TRIP:
+      // Vehicle speed >= 1.2 m/s or agent has traveled beyond 45m stationary anchor
       final last = _currentWaypoints.last;
       final lastLat = (last['lat'] as num).toDouble();
       final lastLng = (last['lng'] as num).toDouble();
@@ -226,27 +240,31 @@ class TripProvider with ChangeNotifier {
         pos.longitude,
       );
 
-      // Parse time delta
-      DateTime lastTime = DateTime.tryParse(last['timestamp']?.toString() ?? '') ?? DateTime.now();
-      final deltaSec = DateTime.now().difference(lastTime).inSeconds.abs();
+      DateTime lastTime = DateTime.tryParse(last['timestamp']?.toString() ?? '') ?? posTime;
+      final deltaSec = posTime.difference(lastTime).inSeconds.abs();
+      final bool hardwareSpeedValid = (pos.speed > 0 && pos.speed <= 45.0);
 
-      // 4. TELEPORTATION REJECTION:
-      // If implied speed > 126 km/h (35 m/s), reject as cellular tower switch or GPS glitch
-      if (deltaSec > 0 && distFromLast > 100.0 && (distFromLast / deltaSec) > 35.0) {
-        debugPrint("Rejected teleportation spike: $distFromLast m in $deltaSec s");
+      // Sanity check against impossible jumps (> 162 km/h without hardware confirmation)
+      if (!hardwareSpeedValid && deltaSec > 0 && distFromLast > 150.0 && (distFromLast / deltaSec) > 45.0) {
+        debugPrint("TripProvider: rejected jump: $distFromLast m in $deltaSec s");
         return;
       }
 
-      // 5. ROAD MOVEMENT ACCUMULATION:
-      // To record real road travel (bike/car), point must have moved at least 15 meters from previous waypoint.
-      if (distFromLast >= 15.0) {
+      // Record highway / road waypoint every 12+ meters
+      if (distFromLast >= 12.0) {
+        _stationaryAnchorLat = pos.latitude;
+        _stationaryAnchorLng = pos.longitude;
         _liveDistance += (distFromLast / 1000.0);
+
+        final speedKmh = pos.speed * 3.6;
+        final roadMode = (speedKmh > 18 || distFromLast > 40) ? 'transit' : 'survey';
+
         _currentWaypoints.add({
           'lat': pos.latitude,
           'lng': pos.longitude,
-          'mode': mode,
+          'mode': roadMode,
           if (address != null) 'address': address,
-          'timestamp': DateTime.now().toIso8601String(),
+          'timestamp': posTime.toIso8601String(),
           'accuracy': pos.accuracy,
           'speed': pos.speed,
         });
@@ -325,14 +343,10 @@ class TripProvider with ChangeNotifier {
         _miscBillUrl = imageUrl;
       }
       
-      // Update local trips history list immediately so the user sees it in History
       _ensureActiveTripInList();
-
-      // Save locally IMMEDIATELY so app closure or kill never loses the expense
       await _saveActiveTripLocally();
       notifyListeners();
       
-      // Sync to backend in background
       if (_isTripActive && _activeTripId != null) {
         try {
           final payload = {
@@ -346,7 +360,6 @@ class TripProvider with ChangeNotifier {
             'misc_particulars': _miscRemarks,
           };
           final updated = await _tripService.saveTrip(payload);
-          // If backend converted to remote URL, retain it
           if (updated.fuelBill?.imageUrl != null && updated.fuelBill!.imageUrl.startsWith('http')) {
             _fuelBillUrl = updated.fuelBill!.imageUrl;
           }
@@ -363,6 +376,82 @@ class TripProvider with ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint("addExpense error: $e");
+      return false;
+    }
+  }
+
+  Future<bool> editExpense(String type, double amount, String remarks, String imageUrl) async {
+    try {
+      if (type.toLowerCase().contains('fuel') || type.toLowerCase().contains('petrol')) {
+        _fuelAmount = amount;
+        _fuelBillUrl = imageUrl;
+      } else {
+        _miscAmount = amount;
+        _miscRemarks = remarks;
+        _miscBillUrl = imageUrl;
+      }
+      
+      _ensureActiveTripInList();
+      await _saveActiveTripLocally();
+      notifyListeners();
+      
+      if (_isTripActive && _activeTripId != null) {
+        try {
+          final payload = {
+            'trip_id': _activeTripId,
+            'user_id': _authProvider?.user?.id ?? '',
+            'approval_status': 'active',
+            'fuel_amount': _fuelAmount,
+            'fuel_bill_url': _fuelBillUrl,
+            'misc_amount': _miscAmount,
+            'misc_bill_url': _miscBillUrl,
+            'misc_particulars': _miscRemarks,
+          };
+          final updated = await _tripService.saveTrip(payload);
+          if (updated.fuelBill?.imageUrl != null && updated.fuelBill!.imageUrl.startsWith('http')) {
+            _fuelBillUrl = updated.fuelBill!.imageUrl;
+          }
+          if (updated.miscBillUrl != null && updated.miscBillUrl!.startsWith('http')) {
+            _miscBillUrl = updated.miscBillUrl;
+          }
+          _ensureActiveTripInList();
+          await _saveActiveTripLocally();
+          notifyListeners();
+        } catch (e) {
+          debugPrint("editExpense backend sync deferred: $e");
+        }
+      }
+      return true;
+    } catch (e) {
+      debugPrint("editExpense error: $e");
+      return false;
+    }
+  }
+
+  Future<bool> updateTripBill({
+    required String tripId,
+    required String billType,
+    required double amount,
+    required String imageUrl,
+    String? remarks,
+  }) async {
+    try {
+      final payload = {
+        'action': 'update_bill',
+        'trip_id': tripId,
+        'user_id': _authProvider?.user?.id ?? '',
+        if (billType.toLowerCase().contains('fuel')) 'fuel_amount': amount,
+        if (billType.toLowerCase().contains('fuel')) 'fuel_bill_url': imageUrl,
+        if (!billType.toLowerCase().contains('fuel')) 'misc_amount': amount,
+        if (!billType.toLowerCase().contains('fuel')) 'misc_bill_url': imageUrl,
+        if (!billType.toLowerCase().contains('fuel') && remarks != null) 'misc_particulars': remarks,
+      };
+
+      await _tripService.saveTrip(payload);
+      await loadTrips();
+      return true;
+    } catch (e) {
+      debugPrint("updateTripBill error: $e");
       return false;
     }
   }
@@ -406,7 +495,6 @@ class TripProvider with ChangeNotifier {
           // If this trip is from yesterday or >16 hours old, it is STALE
           if (_isTripStale(t)) {
             debugPrint("Auto-retiring stale server active trip: ${t.id} from ${t.date}");
-            // Close it on server so it doesn't linger forever
             if (t.id != null && !t.id!.startsWith('offline_')) {
               try {
                 _tripService.saveTrip({
@@ -472,6 +560,8 @@ class TripProvider with ChangeNotifier {
       _isTripActive = false;
       _activeTripId = null;
       _activeTripStartedAt = null;
+      _stationaryAnchorLat = null;
+      _stationaryAnchorLng = null;
       _currentWaypoints = [];
       _liveDistance = 0.0;
       _currentAddress = 'Locating...';
@@ -518,6 +608,8 @@ class TripProvider with ChangeNotifier {
       _miscRemarks = '';
       _fuelBillUrl = null;
       _miscBillUrl = null;
+      _stationaryAnchorLat = null;
+      _stationaryAnchorLng = null;
       _currentWaypoints = [];
       _liveDistance = 0.0;
       _currentAddress = 'Locating...';
@@ -530,11 +622,13 @@ class TripProvider with ChangeNotifier {
       // Immediately capture start GPS coordinates
       Position? startPos = await _locationService.getCurrentPositionSafe();
       if (startPos != null) {
+        _stationaryAnchorLat = startPos.latitude;
+        _stationaryAnchorLng = startPos.longitude;
         _currentWaypoints.add({
           'lat': startPos.latitude,
           'lng': startPos.longitude,
           'mode': 'start',
-          'timestamp': DateTime.now().toIso8601String(),
+          'timestamp': startPos.timestamp.toIso8601String(),
           'accuracy': startPos.accuracy,
           'speed': startPos.speed,
         });
@@ -587,7 +681,7 @@ class TripProvider with ChangeNotifier {
           'lat': endPos.latitude,
           'lng': endPos.longitude,
           'mode': 'end',
-          'timestamp': DateTime.now().toIso8601String(),
+          'timestamp': endPos.timestamp.toIso8601String(),
           'accuracy': endPos.accuracy,
           'speed': endPos.speed,
         });
@@ -620,6 +714,8 @@ class TripProvider with ChangeNotifier {
       // Mark trip inactive locally FIRST to guarantee UI never resurrects it
       _isTripActive = false;
       _activeTripStartedAt = null;
+      _stationaryAnchorLat = null;
+      _stationaryAnchorLng = null;
       await _saveActiveTripLocally();
 
       final completedTrip = await _tripService.saveTrip(payload);
@@ -646,6 +742,8 @@ class TripProvider with ChangeNotifier {
       debugPrint("endTrip error: $e");
       _isTripActive = false;
       _activeTripStartedAt = null;
+      _stationaryAnchorLat = null;
+      _stationaryAnchorLng = null;
       await _saveActiveTripLocally();
       _isLoading = false;
       notifyListeners();

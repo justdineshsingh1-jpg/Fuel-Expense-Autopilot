@@ -84,4 +84,44 @@ class TripLog {
       'flags': flags.map((e) => e.toJson()).toList(),
     };
   }
+
+  TripLog copyWith({
+    String? id,
+    String? employeeId,
+    DateTime? date,
+    double? startReading,
+    String? startOdometerImageUrl,
+    double? startOcrReading,
+    double? endReading,
+    String? endOdometerImageUrl,
+    double? endOcrReading,
+    double? distanceKm,
+    List<TripLocation>? locations,
+    FuelBill? fuelBill,
+    double? miscAmount,
+    String? miscBillUrl,
+    String? miscRemarks,
+    String? status,
+    List<FraudFlag>? flags,
+  }) {
+    return TripLog(
+      id: id ?? this.id,
+      employeeId: employeeId ?? this.employeeId,
+      date: date ?? this.date,
+      startReading: startReading ?? this.startReading,
+      startOdometerImageUrl: startOdometerImageUrl ?? this.startOdometerImageUrl,
+      startOcrReading: startOcrReading ?? this.startOcrReading,
+      endReading: endReading ?? this.endReading,
+      endOdometerImageUrl: endOdometerImageUrl ?? this.endOdometerImageUrl,
+      endOcrReading: endOcrReading ?? this.endOcrReading,
+      distanceKm: distanceKm ?? this.distanceKm,
+      locations: locations ?? this.locations,
+      fuelBill: fuelBill ?? this.fuelBill,
+      miscAmount: miscAmount ?? this.miscAmount,
+      miscBillUrl: miscBillUrl ?? this.miscBillUrl,
+      miscRemarks: miscRemarks ?? this.miscRemarks,
+      status: status ?? this.status,
+      flags: flags ?? this.flags,
+    );
+  }
 }

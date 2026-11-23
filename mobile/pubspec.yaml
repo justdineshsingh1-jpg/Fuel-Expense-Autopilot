@@ -1,7 +1,7 @@
 name: fuel_expense_autopilot
 description: Zero-cost field executive fuel expense automation
 publish_to: 'none'
-version: 1.0.3+4
+version: 1.0.4+5
 
 environment:
   sdk: '>=3.5.4 <4.0.0'

@@ -471,9 +471,30 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _showAddExpenseModal(BuildContext context) {
-    String? capturedImageUrl;
+  void _showAddExpenseModal(
+    BuildContext context, {
+    bool isEditing = false,
+    String? initialType,
+    double? initialAmount,
+    String? initialRemarks,
+    String? initialImageUrl,
+  }) {
+    if (initialType != null && _expenseTypes.contains(initialType)) {
+      _selectedExpenseType = initialType;
+    }
+    if (initialAmount != null && initialAmount > 0) {
+      _expenseAmountController.text = initialAmount.toStringAsFixed(0);
+    } else {
+      _expenseAmountController.clear();
+    }
+    if (initialRemarks != null) {
+      _expenseRemarksController.text = initialRemarks;
+    } else {
+      _expenseRemarksController.clear();
+    }
+    String? capturedImageUrl = initialImageUrl;
     bool isSubmitting = false;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -498,7 +519,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Add Expense Bill', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+                        Text(
+                          isEditing ? 'Edit / Replace Bill' : 'Add Expense Bill',
+                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                        ),
                         IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
                       ],
                     ),
@@ -557,7 +581,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 8),
                     InkWell(
                       onTap: isSubmitting ? null : () async {
-                        final url = await CameraUtils.showPhotoSourceDialog(context, title: 'Attach Bill Photo');
+                        final url = await CameraUtils.showPhotoSourceDialog(context, title: isEditing ? 'Re-upload / Change Bill Photo' : 'Attach Bill Photo');
                         if (url != null) {
                           modalSetState(() { capturedImageUrl = url; });
                         }
@@ -571,9 +595,32 @@ class _HomeScreenState extends State<HomeScreen> {
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: capturedImageUrl != null
-                          ? (capturedImageUrl!.startsWith('http') 
-                              ? Image.network(capturedImageUrl!, fit: BoxFit.cover) 
-                              : Image.file(File(capturedImageUrl!), cacheWidth: 600, fit: BoxFit.cover))
+                          ? Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                (capturedImageUrl!.startsWith('http') 
+                                    ? Image.network(capturedImageUrl!, fit: BoxFit.cover, width: double.infinity, height: double.infinity) 
+                                    : Image.file(File(capturedImageUrl!), cacheWidth: 600, fit: BoxFit.cover, width: double.infinity, height: double.infinity)),
+                                Positioned(
+                                  bottom: 8,
+                                  right: 8,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withOpacity(0.7),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Row(
+                                      children: [
+                                        Icon(Icons.camera_alt, color: Colors.white, size: 14),
+                                        SizedBox(width: 4),
+                                        Text('Tap to Change Photo', style: TextStyle(color: Colors.white, fontSize: 11)),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )
                           : const Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
@@ -613,12 +660,19 @@ class _HomeScreenState extends State<HomeScreen> {
                           final tripProv = Provider.of<TripProvider>(context, listen: false);
 
                           try {
-                            final ok = await tripProv.addExpense(
-                              _selectedExpenseType,
-                              amt,
-                              remarks,
-                              imgUrl,
-                            );
+                            final ok = isEditing
+                                ? await tripProv.editExpense(
+                                    _selectedExpenseType,
+                                    amt,
+                                    remarks,
+                                    imgUrl,
+                                  )
+                                : await tripProv.addExpense(
+                                    _selectedExpenseType,
+                                    amt,
+                                    remarks,
+                                    imgUrl,
+                                  );
 
                             _expenseAmountController.clear();
                             _expenseRemarksController.clear();
@@ -626,7 +680,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               Navigator.pop(ctx);
                             }
                             messenger.showSnackBar(SnackBar(
-                              content: Text(ok ? 'Expense bill added and saved!' : 'Expense saved locally.'),
+                              content: Text(ok 
+                                  ? (isEditing ? 'Bill replaced and updated successfully!' : 'Expense bill added and saved!')
+                                  : 'Expense saved locally.'),
                               backgroundColor: ok ? Colors.green : Colors.orange,
                             ));
                           } catch (err) {
@@ -639,7 +695,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         },
                         child: isSubmitting 
                           ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                          : const Text('Confirm & Submit', style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold)),
+                          : Text(isEditing ? 'Update & Save Bill' : 'Confirm & Submit', style: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold)),
                       ),
                     ),
                     const SizedBox(height: 24),
@@ -1019,7 +1075,34 @@ class _HomeScreenState extends State<HomeScreen> {
                                     ],
                                   ),
                                 ),
-                                const Icon(Icons.check_circle, color: Colors.green, size: 18),
+                                InkWell(
+                                  onTap: () {
+                                    _showAddExpenseModal(
+                                      context,
+                                      isEditing: true,
+                                      initialType: 'Fuel / Petrol',
+                                      initialAmount: tripProvider.fuelAmount,
+                                      initialRemarks: '',
+                                      initialImageUrl: tripProvider.fuelBillUrl,
+                                    );
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue.shade50,
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: Colors.blue.shade200),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.edit, color: Color(0xFF1D5BB5), size: 14),
+                                        SizedBox(width: 4),
+                                        Text('Change / Re-upload', style: TextStyle(color: Color(0xFF1D5BB5), fontSize: 11, fontWeight: FontWeight.bold)),
+                                      ],
+                                    ),
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -1048,7 +1131,34 @@ class _HomeScreenState extends State<HomeScreen> {
                                     ],
                                   ),
                                 ),
-                                const Icon(Icons.check_circle, color: Colors.green, size: 18),
+                                InkWell(
+                                  onTap: () {
+                                    _showAddExpenseModal(
+                                      context,
+                                      isEditing: true,
+                                      initialType: 'Other Field Expense',
+                                      initialAmount: tripProvider.miscAmount,
+                                      initialRemarks: tripProvider.miscRemarks,
+                                      initialImageUrl: tripProvider.miscBillUrl,
+                                    );
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue.shade50,
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: Colors.blue.shade200),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.edit, color: Color(0xFF1D5BB5), size: 14),
+                                        SizedBox(width: 4),
+                                        Text('Change / Re-upload', style: TextStyle(color: Color(0xFF1D5BB5), fontSize: 11, fontWeight: FontWeight.bold)),
+                                      ],
+                                    ),
+                                  ),
+                                ),
                               ],
                             ),
                           ),

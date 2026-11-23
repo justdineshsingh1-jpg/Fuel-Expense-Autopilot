@@ -105,6 +105,29 @@ export async function POST(request: Request) {
     const tripTargetId = body.trip_id || body.id;
     
     // ----------------------------------------------------
+    // 0A. UPDATE BILL / EXPENSE RE-UPLOAD
+    // ----------------------------------------------------
+    if (body.action === 'update_bill' && tripTargetId) {
+      const updateData: Record<string, any> = {
+        updated_at: new Date().toISOString()
+      };
+      if (body.fuel_amount !== undefined) updateData.fuel_amount = body.fuel_amount;
+      if (body.fuel_liters !== undefined) updateData.fuel_liters = body.fuel_liters;
+      if (body.fuel_bill_url !== undefined) updateData.fuel_bill_url = body.fuel_bill_url;
+      if (body.misc_amount !== undefined) updateData.misc_amount = body.misc_amount;
+      if (body.misc_bill_url !== undefined) updateData.misc_bill_url = body.misc_bill_url;
+      if (body.misc_particulars !== undefined) updateData.misc_particulars = body.misc_particulars;
+
+      const { data, error } = await supabaseAdmin
+        .from('trip_logs')
+        .update(sanitize(updateData))
+        .eq('id', tripTargetId)
+        .select();
+      if (error) throw error;
+      return NextResponse.json(data?.[0] || { success: true });
+    }
+    
+    // ----------------------------------------------------
     // 0. ABANDON / RESET SHIFT LOGIC
     // ----------------------------------------------------
     if (body.approval_status === 'abandoned') {
