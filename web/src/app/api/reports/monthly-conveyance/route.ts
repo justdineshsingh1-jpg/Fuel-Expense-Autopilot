@@ -3,6 +3,14 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 export const dynamic = 'force-dynamic';
 
+function getLastDayOfMonth(yearMonth: string): string {
+  const parts = yearMonth.split('-');
+  const y = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  const lastDay = new Date(y, m, 0).getDate();
+  return `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const userIdParam = searchParams.get('userId');
@@ -27,7 +35,7 @@ export async function GET(request: Request) {
 
   try {
     const startDate = `${month}-01`;
-    const endDate = `${month}-31`; 
+    const endDate = getLastDayOfMonth(month); 
 
     let targetUserId = userIdParam;
 
@@ -297,7 +305,7 @@ export async function GET(request: Request) {
 
     const prevMonthKey = `${prevYear}-${String(prevMonthNum).padStart(2, '0')}`;
     const prevStartDate = `${prevMonthKey}-01`;
-    const prevEndDate = `${prevMonthKey}-31`;
+    const prevEndDate = getLastDayOfMonth(prevMonthKey);
 
     let prevTotalOdoKm = 0;
     let prevTotalFuel = 0;

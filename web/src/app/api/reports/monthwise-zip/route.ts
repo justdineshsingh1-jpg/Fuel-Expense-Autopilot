@@ -11,7 +11,9 @@ export async function GET(request: Request) {
 
   try {
     const startDate = `${month}-01`;
-    const endDate = `${month}-31`;
+    const parts = month.split('-');
+    const lastDay = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10), 0).getDate();
+    const endDate = `${month}-${String(lastDay).padStart(2, '0')}`;
 
     // 1. Find all distinct users who have trips in this month
     const { data: userTrips, error: tripsErr } = await supabaseAdmin
