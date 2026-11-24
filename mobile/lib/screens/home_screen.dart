@@ -9,6 +9,7 @@ import '../widgets/photo_thumbnail.dart';
 import 'package:intl/intl.dart';
 import 'package:geolocator/geolocator.dart';
 import 'dart:io';
+import 'package:permission_handler/permission_handler.dart';
 import '../widgets/route_map_widget.dart';
 import 'trip_history_screen.dart';
 import 'trip_detail_screen.dart';
@@ -36,14 +37,28 @@ class _HomeScreenState extends State<HomeScreen> {
     'Other (Specify below)'
   ];
 
+  bool _hasLocationAlways = true;
+
   @override
   void initState() {
     super.initState();
     PermissionUtils.requestAllPermissions();
+    _checkLocationAlwaysPermission();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkRecoveredCameraData();
       Provider.of<TripProvider>(context, listen: false).loadTrips();
     });
+  }
+
+  Future<void> _checkLocationAlwaysPermission() async {
+    try {
+      final status = await Permission.locationAlways.status;
+      if (mounted) {
+        setState(() {
+          _hasLocationAlways = status.isGranted;
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _checkRecoveredCameraData() async {
@@ -173,6 +188,50 @@ class _HomeScreenState extends State<HomeScreen> {
                             ));
                             return;
                           }
+
+                          // Check Background Location (Allow all the time)
+                          try {
+                            final bgStatus = await Permission.locationAlways.status;
+                            if (!bgStatus.isGranted) {
+                              final req = await Permission.locationAlways.request();
+                              if (!req.isGranted && ctx.mounted) {
+                                final proceed = await showDialog<bool>(
+                                  context: ctx,
+                                  builder: (dCtx) => AlertDialog(
+                                    title: const Row(
+                                      children: [
+                                        Icon(Icons.location_on, color: Color(0xFF1D5BB5)),
+                                        SizedBox(width: 8),
+                                        Text('Pocket GPS Tracking', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                                      ],
+                                    ),
+                                    content: const Text(
+                                      'For your full road route to record while your phone is locked or in your pocket, Android requires Location set to "Allow all the time".\n\nWould you like to open Settings to enable it now?',
+                                      style: TextStyle(fontSize: 14),
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(dCtx, true),
+                                        child: const Text('Start Anyway'),
+                                      ),
+                                      ElevatedButton(
+                                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1D5BB5)),
+                                        onPressed: () {
+                                          Navigator.pop(dCtx, false);
+                                          openAppSettings();
+                                        },
+                                        child: const Text('Open Settings', style: TextStyle(color: Colors.white)),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                                if (proceed != true) {
+                                  if (ctx.mounted) modalSetState(() { isStarting = false; });
+                                  return;
+                                }
+                              }
+                            }
+                          } catch (_) {}
 
                           final img = capturedImageUrl!;
 
@@ -819,6 +878,42 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Background Location Warning Banner
+              if (!_hasLocationAlways)
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 14),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.amber.shade400),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Pocket GPS: Action Required', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF9A3412))),
+                            const SizedBox(height: 2),
+                            const Text('Set location to "Allow all the time" in Settings so road travel records while phone is in your pocket.', style: TextStyle(fontSize: 11, color: Colors.black87)),
+                          ],
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          await openAppSettings();
+                          _checkLocationAlwaysPermission();
+                        },
+                        child: const Text('Settings', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1D5BB5))),
+                      ),
+                    ],
+                  ),
+                ),
+
               // Active Trip Banner
               if (tripProvider.isTripActive)
                 Container(
