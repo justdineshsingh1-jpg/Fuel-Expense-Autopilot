@@ -10,6 +10,7 @@ import 'package:intl/intl.dart';
 import 'package:geolocator/geolocator.dart';
 import 'dart:io';
 import 'package:permission_handler/permission_handler.dart';
+import '../services/app_update_service.dart';
 import '../widgets/route_map_widget.dart';
 import 'trip_history_screen.dart';
 import 'trip_detail_screen.dart';
@@ -47,6 +48,7 @@ class _HomeScreenState extends State<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkRecoveredCameraData();
       Provider.of<TripProvider>(context, listen: false).loadTrips();
+      AppUpdateService.checkAndPromptUpdate(context);
     });
   }
 
@@ -893,13 +895,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
                       const SizedBox(width: 10),
-                      Expanded(
+                      const Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('Pocket GPS: Action Required', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF9A3412))),
-                            const SizedBox(height: 2),
-                            const Text('Set location to "Allow all the time" in Settings so road travel records while phone is in your pocket.', style: TextStyle(fontSize: 11, color: Colors.black87)),
+                            Text('Pocket GPS: Action Required', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF9A3412))),
+                            SizedBox(height: 2),
+                            Text('Set location to "Allow all the time" in Settings so road travel records while phone is in your pocket.', style: TextStyle(fontSize: 11, color: Colors.black87)),
                           ],
                         ),
                       ),

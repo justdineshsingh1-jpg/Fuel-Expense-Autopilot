@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/trip_provider.dart';
+import '../services/app_update_service.dart';
 import '../widgets/stat_card.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -315,6 +316,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     value: _notificationsEnabled,
                     onChanged: (val) => setState(() => _notificationsEnabled = val),
                   ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const CircleAvatar(
+                      backgroundColor: Color(0xFFEFF6FF),
+                      child: Icon(Icons.system_update_rounded, color: Color(0xFF1D5BB5)),
+                    ),
+                    title: const Text('Check for Updates (OTA)', style: TextStyle(fontWeight: FontWeight.w600)),
+                    subtitle: const Text('Over-the-air app updates'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => AppUpdateService.checkAndPromptUpdate(context, showNoUpdateNotice: true),
+                  ),
                 ],
               ),
             ),
@@ -334,7 +346,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             const SizedBox(height: 16),
             const Center(
-              child: Text('Version 1.0.3 (Build 4)', style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)),
+              child: Text(
+                'Version ${AppUpdateService.currentVersionName} (Build ${AppUpdateService.currentBuildNumber})',
+                style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold),
+              ),
             ),
           ],
         ),

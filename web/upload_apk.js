@@ -42,17 +42,59 @@ async function upload() {
             upsert: true
         });
 
+    // 3. Upload version.json for Over-the-Air (OTA) In-App Updates
+    const pubspecPath = path.join(__dirname, '../mobile/pubspec.yaml');
+    let version = '1.0.5';
+    let buildNumber = 6;
+    if (fs.existsSync(pubspecPath)) {
+        const pubText = fs.readFileSync(pubspecPath, 'utf8');
+        const match = pubText.match(/version:\s*([0-9\.]+)\+([0-9]+)/);
+        if (match) {
+            version = match[1];
+            buildNumber = parseInt(match[2], 10);
+        }
+    }
+
+    const versionMeta = {
+        version: version,
+        buildNumber: buildNumber,
+        downloadUrl: 'https://isjsbwjxvpmmgwvvksit.supabase.co/storage/v1/object/public/apks/FuelExpenseAutopilot.apk',
+        releaseNotes: 'Over-the-air updates, pocket background GPS auto-tracking, real-time highway sync, anti-drift fixes, and bill re-upload.',
+        forceUpdate: false,
+        updatedAt: new Date().toISOString()
+    };
+
+    console.log(`Publishing OTA Metadata (v${version} build ${buildNumber}) ...`);
+    const versionBuffer = Buffer.from(JSON.stringify(versionMeta, null, 2));
+
+    await supabase.storage
+        .from('apks')
+        .upload('version.json', versionBuffer, {
+            contentType: 'application/json',
+            upsert: true
+        });
+
+    await supabase.storage
+        .from('fuel-receipts')
+        .upload('downloads/version.json', versionBuffer, {
+            contentType: 'application/json',
+            upsert: true
+        });
+
     const { data: url1 } = supabase.storage.from('apks').getPublicUrl('FuelExpenseAutopilot.apk');
     const { data: url2 } = supabase.storage.from('apks').getPublicUrl('FuelApp_latest.apk');
     const { data: url3 } = supabase.storage.from('fuel-receipts').getPublicUrl('downloads/FuelExpenseAutopilot.apk');
+    const { data: versionUrl } = supabase.storage.from('apks').getPublicUrl('version.json');
 
     console.log('\n========================================================');
-    console.log('UNIVERSAL APK UPLOADED SUCCESSFULLY!');
+    console.log('UNIVERSAL APK & OTA UPDATE METADATA UPLOADED SUCCESSFULLY!');
     console.log('Download URLs (Active & Ready):');
-    console.log('Primary Link:');
+    console.log('Primary APK Link:');
     console.log(url1.publicUrl);
-    console.log('\nSecondary Link:');
+    console.log('\nSecondary APK Link:');
     console.log(url3.publicUrl);
+    console.log('\nOTA Version Manifest:');
+    console.log(versionUrl.publicUrl);
     console.log('========================================================\n');
 }
 upload();
